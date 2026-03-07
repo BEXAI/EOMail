@@ -1,6 +1,8 @@
 # AIMAIL.com
 
-A full-featured Gmail replica called AIMAIL.com, built with React, TypeScript, Express, PostgreSQL, and Drizzle ORM — enhanced with AI-powered autonomous email assistance.
+A full-featured Gmail replica transformed into an AI-powered autonomous email assistant. Built with React, TypeScript, Express, PostgreSQL, and Drizzle ORM.
+
+**Mission**: Shift users from "Inbox Zero" to "Zero Time Spent" — the inbox becomes an autonomous, action-oriented Chief of Staff.
 
 ## Architecture
 
@@ -13,93 +15,90 @@ A full-featured Gmail replica called AIMAIL.com, built with React, TypeScript, E
 ## Database
 
 - **PostgreSQL** via Replit's built-in database (DATABASE_URL)
-- **Tables**: `users` (UUID PK), `emails` (UUID PK, FK to users, AI fields), `agent_activity` (UUID PK), `session` (connect-pg-simple)
+- **Tables**: `users` (UUID PK), `emails` (UUID PK, FK to users, AI fields), `agent_activity` (UUID PK, agent names), `session` (connect-pg-simple)
 - **ORM**: Drizzle ORM with `drizzle-kit push` for schema sync
 - **Indexes**: emails.userId, emails.folder, emails.(userId+folder), emails.timestamp
 
-## Authentication
+## Named AI Agents
 
-- UUID-based user IDs generated server-side via `gen_random_uuid()`
-- Passport LocalStrategy with bcrypt password hashing
-- Session stored in PostgreSQL via connect-pg-simple
-- Auth routes: POST /api/auth/register, /api/auth/login, /api/auth/logout, GET /api/auth/user
-- All email routes protected with requireAuth middleware
-- Each user's emails are scoped by userId — full multi-user isolation
-- New users get 12 realistic seed emails on registration (auto AI-processed)
+Three specialized autonomous agents from the AIMAIL product blueprint:
+
+1. **FinOps Auto-Resolver** (Level 4 Autonomy) — Intercepts financial emails (receipts, invoices, subscriptions), extracts amounts, auto-categorizes as finance. Shows Liquid UI finance card with extracted amounts and "Log to Accounting" action.
+
+2. **Chrono-Logistics Coordinator** (Level 4 Autonomy) — Detects scheduling/meeting emails, identifies dates and times, offers calendar integration. Shows Liquid UI scheduling card with "Accept & Add to Calendar" action.
+
+3. **Aegis Gatekeeper** (Level 5 Autonomy) — Scans all emails for spam, phishing, impersonation, and deepfake risks. Shows impersonation probability percentage, threat type classification, and collapsible technical analysis for high-risk emails.
+
+Each agent activity is logged with agent name, displayed in sidebar with distinct icon and color.
 
 ## Key Features
 
 ### Gmail Core
 - Inbox, Starred, Sent, Drafts, Spam, Trash, All Mail folders
 - Email list with unread/read states, star, delete, archive, move-to actions
-- Mark as read/unread toggle
 - Bulk actions: select all, bulk delete, mark read/unread, star, archive
 - Email detail view with HTML body rendering
-- Compose dialog with To, CC, BCC, Subject, Body fields
+- Compose dialog with To, CC, BCC, Subject, Body, prefill support
 - Reply functionality with pre-filled fields
 - Undo Send — 5 second delay with undo toast button
-- Move to folder dropdown (Inbox, Archive, Spam, Trash)
-- Archive action (moves to All Mail)
-- Label filtering — click sidebar labels to filter by label
-- Search across emails with keyword highlighting
-- Dark/light mode toggle with localStorage persistence
-- Keyboard shortcuts: c=compose, r=reply, s=star, e=archive, #=delete, j/k=navigate, /=search, Esc=close, Cmd+K=AI command
-- Responsive mobile layout (single-column on small screens, back button)
-- Signup / Login / Logout with session persistence
+- Search with keyword highlighting
+- Dark/light mode toggle
+- Keyboard shortcuts: c=compose, r=reply, s=star, e=archive, #=delete, j/k=navigate, /=search, Esc=close, Cmd+K=AI Action Center
+- Responsive mobile layout
 
 ### AI Features
-- **Morning Briefing Dashboard**: Personalized greeting with stats (unread, AI-processed, pending approvals), AI-generated briefing summary, top urgent emails, "Process All with AI" button
-- **AI Command Bar (Cmd+K)**: Natural language queries about inbox, quick command suggestions, inline AI response display
-- **Email Classification & Summarization**: AI categorizes emails (finance/scheduling/newsletter/action-required/social/notification), assigns urgency (low/medium/high), suggests actions
-- **AI Draft Replies**: Automatic reply drafting for action-required emails
-- **Pending Approvals Workflow**: Virtual folder showing emails with AI-drafted replies, Approve & Send / Edit / Reject buttons
-- **Active Agents Sidebar**: Live agent activity feed with status indicators (pending/complete/error), auto-refresh while tasks are active
-- **Gatekeeper Spam Analysis**: AI spam risk scoring (0-100), red warning banner for high-risk emails with Trust/Report actions
-- **AI Insights Panel**: Per-email AI summary, urgency badge, category badge, suggested action chip in detail view
+- **Morning Briefing Dashboard**: "Chief of Staff" briefing with personalized greeting, stats cards, agent activity summary (per-agent task counts with icons), urgent emails list, "Process All with AI" button
+- **AI Action Center (Cmd+K)**: Agent-grouped command suggestions (FinOps, Chrono, Aegis, AIMAIL), command history (localStorage), inline AI response
+- **Liquid UI**: Category-specific interactive micro-app cards in email detail:
+  - Finance: extracted amounts, "Log to Accounting", "Auto-Archive"
+  - Scheduling: meeting detection, "Accept & Add to Calendar", "Suggest Alternatives"
+  - Newsletter: condensed summary, "Archive", "Unsubscribe"
+  - Action-Required: priority indicator, quick reply/flag actions
+- **Tone Micro-Prompts**: Draft reply editing with one-click tone chips ("More assertive", "More casual", "Shorter", "More formal", "Add gratitude")
+- **Enhanced Gatekeeper**: Impersonation probability percentage, threat type badges (phishing/impersonation/urgency-manipulation/spam), collapsible technical analysis
+- **Pending Approvals Workflow**: Virtual folder, AI draft replies with Approve & Send / Edit / Reject
+- **Active Agents Sidebar**: Named agents with distinct icons/colors, real-time status, auto-refresh
 
 ## File Structure
 
-- `client/src/pages/auth.tsx` - Login/signup page with tabs
+- `client/src/pages/auth.tsx` - Login/signup with AIMAIL branding and tagline
 - `client/src/pages/mail.tsx` - Main mail page with all state management
-- `client/src/hooks/use-auth.tsx` - Auth context provider with login/register/logout mutations
-- `client/src/components/app-sidebar.tsx` - Left sidebar with folders, label filtering, Active Agents, user info
-- `client/src/components/email-list.tsx` - Email list with AI urgency dots, category badges, AI summaries
-- `client/src/components/email-detail.tsx` - Email reading pane with AI Insights, Gatekeeper warnings, Pending Approval cards
-- `client/src/components/compose-dialog.tsx` - Compose/reply dialog with CC/BCC fields and prefill support
-- `client/src/components/morning-briefing.tsx` - Morning Briefing dashboard component
-- `client/src/components/ai-command-bar.tsx` - AI Command Bar dialog (Cmd+K)
-- `server/index.ts` - Express server setup, auth middleware wiring
-- `server/auth.ts` - Passport config, session setup, auth routes (register/login/logout)
-- `server/routes.ts` - API routes with requireAuth, userId scoping, AI endpoints
-- `server/storage.ts` - DatabaseStorage class using Drizzle ORM queries
-- `server/db.ts` - PostgreSQL connection pool and Drizzle instance
-- `server/ai.ts` - AI service functions (summarize, classify, draft, briefing, spam analysis, command)
-- `server/ai-pipeline.ts` - AI processing pipeline (single email + batch processing)
-- `shared/schema.ts` - Drizzle schema: users, emails (with AI fields), agent_activity tables
-- `shared/models/chat.ts` - Chat message types
+- `client/src/hooks/use-auth.tsx` - Auth context provider
+- `client/src/components/app-sidebar.tsx` - Sidebar with folders, labels, named Active Agents
+- `client/src/components/email-list.tsx` - Email list with AI urgency dots, category badges
+- `client/src/components/email-detail.tsx` - Email detail with AI Insights, Liquid UI cards, enhanced Gatekeeper, tone micro-prompts
+- `client/src/components/compose-dialog.tsx` - Compose/reply dialog with prefill support
+- `client/src/components/morning-briefing.tsx` - Chief of Staff briefing dashboard with agent stats
+- `client/src/components/ai-command-bar.tsx` - Agent-grouped AI Action Center (Cmd+K)
+- `server/ai.ts` - AI service functions with tone support and enhanced spam analysis
+- `server/ai-pipeline.ts` - AI processing pipeline with named agent assignments
+- `server/routes.ts` - API routes including AI endpoints with tone and agent stats
+- `server/storage.ts` - DatabaseStorage with enriched seed emails
+- `shared/schema.ts` - Drizzle schema with AI fields and agentName column
 
 ## API Routes
 
 ### Auth
-- `POST /api/auth/register` — Create user (UUID), hash password, seed emails, auto-login
-- `POST /api/auth/login` — Authenticate with username/password
+- `POST /api/auth/register` — Create user, seed emails, auto-login
+- `POST /api/auth/login` — Authenticate
 - `POST /api/auth/logout` — Destroy session
-- `GET /api/auth/user` — Return current user or 401
+- `GET /api/auth/user` — Current user or 401
 
 ### Emails
-- `GET /api/emails?folder=inbox&search=query&label=work` — List emails (auth required, scoped by userId)
-- `GET /api/emails/counts` — Unread/total counts per folder
+- `GET /api/emails?folder=inbox&search=query&label=work` — List emails
+- `GET /api/emails/counts` — Folder counts
 - `GET /api/emails/:id` — Single email
-- `POST /api/emails` — Create email (userId injected server-side)
-- `PATCH /api/emails/:id` — Update email (read, star, folder)
-- `POST /api/emails/bulk` — Bulk update or delete { ids, action, updates }
+- `POST /api/emails` — Create email
+- `PATCH /api/emails/:id` — Update email
+- `POST /api/emails/bulk` — Bulk operations
 - `DELETE /api/emails/:id` — Delete email
 
 ### AI
-- `POST /api/ai/process/:id` — Process single email with AI (classify, summarize, draft, spam check)
-- `POST /api/ai/process-all` — Batch process all unprocessed emails
-- `GET /api/ai/briefing` — Generate morning briefing from recent emails
-- `GET /api/ai/activity` — Get recent agent activity log
-- `POST /api/ai/command` — Natural language command (takes `prompt` in body)
-- `POST /api/ai/approve/:id` — Approve AI draft reply (sends as email)
-- `POST /api/ai/reject/:id` — Reject AI draft reply (clears draft)
+- `POST /api/ai/process/:id` — Process single email (classify, summarize, draft, spam)
+- `POST /api/ai/process-all` — Batch process unprocessed emails
+- `POST /api/ai/draft-reply/:id` — Generate/regenerate draft with optional `tone` param
+- `GET /api/ai/briefing` — Morning briefing with agent stats
+- `GET /api/ai/activity` — Agent activity log (includes agent names)
+- `POST /api/ai/command` — Natural language command
+- `POST /api/ai/approve/:id` — Approve and send AI draft
+- `POST /api/ai/reject/:id` — Reject AI draft

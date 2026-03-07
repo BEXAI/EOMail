@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { type Email } from "@shared/schema";
 import { getInitials, getSenderColor, cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -39,6 +40,11 @@ import {
   X,
   Loader2,
   Zap,
+  DollarSign,
+  Calendar,
+  Newspaper,
+  Clock,
+  FileText,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -76,9 +82,182 @@ const categoryIcons: Record<string, string> = {
   notification: "🔔",
 };
 
+const toneChips = [
+  { id: "assertive", label: "More assertive" },
+  { id: "casual", label: "More casual" },
+  { id: "shorter", label: "Shorter" },
+  { id: "formal", label: "More formal" },
+  { id: "gratitude", label: "Add gratitude" },
+];
+
+function parseSpamReason(rawReason: string | null): { reason: string; threatType: string; impersonationProbability: number } {
+  if (!rawReason) return { reason: "Unable to assess risk.", threatType: "legitimate", impersonationProbability: 0 };
+  try {
+    const parsed = JSON.parse(rawReason);
+    return {
+      reason: parsed.reason || rawReason,
+      threatType: parsed.threatType || "spam",
+      impersonationProbability: parsed.impersonationProbability || 0,
+    };
+  } catch {
+    return { reason: rawReason, threatType: "spam", impersonationProbability: 0 };
+  }
+}
+
+const threatTypeLabels: Record<string, { label: string; color: string }> = {
+  phishing: { label: "Phishing Attack", color: "bg-red-600" },
+  impersonation: { label: "Identity Impersonation", color: "bg-orange-600" },
+  "urgency-manipulation": { label: "Urgency Manipulation", color: "bg-amber-600" },
+  spam: { label: "Spam / Junk", color: "bg-yellow-600" },
+  legitimate: { label: "Legitimate", color: "bg-green-600" },
+};
+
+function LiquidUICard({ email, onArchive }: { email: Email; onArchive: (id: string) => void }) {
+  const category = email.aiCategory;
+  if (!category || !email.aiProcessed) return null;
+
+  if (category === "finance") {
+    const amounts = email.body.replace(/<[^>]*>/g, "").match(/\$[\d,]+\.?\d*/g) || [];
+    return (
+      <Card className="mt-4 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30" data-testid="liquid-ui-finance">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
+              <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <span className="text-sm font-semibold text-foreground">FinOps Auto-Resolver</span>
+              <Badge variant="secondary" className="ml-2 text-[10px] py-0 px-1.5 h-4 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-400 border-0">
+                Level 4 Autonomy
+              </Badge>
+            </div>
+          </div>
+          {amounts.length > 0 && (
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              {amounts.map((amount, i) => (
+                <span key={i} className="text-lg font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/50 px-3 py-1 rounded-md">
+                  {amount}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="text-xs gap-1.5 border-emerald-300 dark:border-emerald-700" data-testid="button-log-accounting">
+              <FileText className="w-3 h-3" /> Log to Accounting
+            </Button>
+            <Button size="sm" variant="ghost" className="text-xs gap-1.5" onClick={() => onArchive(email.id)} data-testid="button-auto-archive">
+              <Archive className="w-3 h-3" /> Auto-Archive
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (category === "scheduling") {
+    return (
+      <Card className="mt-4 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30" data-testid="liquid-ui-scheduling">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+              <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <span className="text-sm font-semibold text-foreground">Chrono-Logistics Coordinator</span>
+              <Badge variant="secondary" className="ml-2 text-[10px] py-0 px-1.5 h-4 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-400 border-0">
+                Level 4 Autonomy
+              </Badge>
+            </div>
+          </div>
+          <div className="bg-blue-100/50 dark:bg-blue-900/30 rounded-md p-3 mb-3">
+            <div className="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300">
+              <Clock className="w-3.5 h-3.5" />
+              <span className="font-medium">Meeting request detected</span>
+            </div>
+            <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mt-1">
+              {email.aiSummary || "Calendar event detected in this email."}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="text-xs gap-1.5 border-blue-300 dark:border-blue-700" data-testid="button-accept-calendar">
+              <Calendar className="w-3 h-3" /> Accept & Add to Calendar
+            </Button>
+            <Button size="sm" variant="ghost" className="text-xs gap-1.5" data-testid="button-suggest-alternatives">
+              <Clock className="w-3 h-3" /> Suggest Alternatives
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (category === "newsletter") {
+    return (
+      <Card className="mt-4 border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30" data-testid="liquid-ui-newsletter">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+              <Newspaper className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            </div>
+            <span className="text-sm font-semibold text-foreground">Newsletter Summary</span>
+          </div>
+          {email.aiSummary && (
+            <div className="bg-gray-100/50 dark:bg-gray-800/30 rounded-md p-3 mb-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Key Takeaways</p>
+              <p className="text-sm text-foreground/80">{email.aiSummary}</p>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" className="text-xs gap-1.5" onClick={() => onArchive(email.id)} data-testid="button-archive-newsletter">
+              <Archive className="w-3 h-3" /> Archive
+            </Button>
+            <Button size="sm" variant="ghost" className="text-xs gap-1.5 text-muted-foreground" data-testid="button-unsubscribe">
+              <X className="w-3 h-3" /> Unsubscribe
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (category === "action-required") {
+    return (
+      <Card className="mt-4 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/30" data-testid="liquid-ui-action">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
+              <Zap className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+            </div>
+            <span className="text-sm font-semibold text-foreground">Action Required</span>
+            {email.aiUrgency === "high" && (
+              <Badge variant="destructive" className="text-[10px] py-0 px-1.5 h-4">Urgent</Badge>
+            )}
+          </div>
+          {email.aiSummary && (
+            <p className="text-sm text-foreground/80 mb-3">{email.aiSummary}</p>
+          )}
+          <div className="flex items-center gap-2">
+            {email.aiSuggestedAction === "reply" && (
+              <Button size="sm" variant="outline" className="text-xs gap-1.5 border-orange-300 dark:border-orange-700" data-testid="button-quick-reply">
+                <Reply className="w-3 h-3" /> Quick Reply
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" className="text-xs gap-1.5" data-testid="button-flag-action">
+              <Star className="w-3 h-3" /> Flag for Later
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return null;
+}
+
 export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onReply, onMarkRead, onMove, onArchive, onCompose }: EmailDetailProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [activeTone, setActiveTone] = useState<string | null>(null);
 
   const processEmailMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -113,6 +292,22 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
       queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
       queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
       toast({ title: "Draft rejected", description: "AI draft reply has been discarded." });
+    },
+  });
+
+  const toneMutation = useMutation({
+    mutationFn: async ({ id, tone }: { id: string; tone: string }) => {
+      setActiveTone(tone);
+      const res = await apiRequest("POST", `/api/ai/draft-reply/${id}`, { tone });
+      return res.json();
+    },
+    onSuccess: () => {
+      setActiveTone(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+      toast({ title: "Draft updated", description: "Reply regenerated with new tone." });
+    },
+    onError: () => {
+      setActiveTone(null);
     },
   });
 
@@ -160,6 +355,7 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
   const avatarColor = getSenderColor(email.from);
   const showSpamWarning = email.aiSpamScore !== null && email.aiSpamScore > 70;
   const urgency = urgencyColors[email.aiUrgency || "low"];
+  const spamData = parseSpamReason(email.aiSpamReason);
 
   const handleSuggestedAction = () => {
     if (!email.aiSuggestedAction) return;
@@ -283,22 +479,42 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
       <div className="flex-1 overflow-y-auto">
         <div className="px-4 md:px-6 pt-6 pb-4">
           {showSpamWarning && (
-            <Card className="mb-4 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/50" data-testid="gatekeeper-warning">
+            <Card className="mb-4 border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950/50 shadow-sm" data-testid="gatekeeper-warning">
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
-                  <ShieldAlert className="w-6 h-6 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                  <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900 flex items-center justify-center shrink-0">
+                    <ShieldAlert className="w-5 h-5 text-red-600 dark:text-red-400" />
+                  </div>
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-red-700 dark:text-red-400 text-sm">
-                        Aegis Gatekeeper Warning
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="font-bold text-red-700 dark:text-red-400 text-sm">
+                        Aegis Gatekeeper Alert
                       </span>
-                      <Badge variant="destructive" className="text-xs">
-                        {email.aiSpamScore}% Risk
+                      <Badge className={cn("text-xs text-white", threatTypeLabels[spamData.threatType]?.color || "bg-red-600")}>
+                        {threatTypeLabels[spamData.threatType]?.label || "Threat Detected"}
                       </Badge>
                     </div>
-                    <p className="text-sm text-red-600/80 dark:text-red-400/80">
-                      {email.aiSpamReason}
-                    </p>
+                    {spamData.impersonationProbability > 50 && (
+                      <div className="flex items-center gap-2 my-2">
+                        <span className="text-2xl font-black text-red-600 dark:text-red-400" data-testid="impersonation-probability">
+                          {spamData.impersonationProbability}%
+                        </span>
+                        <span className="text-sm font-semibold text-red-600/80 dark:text-red-400/80">
+                          AI-Impersonation Probability
+                        </span>
+                      </div>
+                    )}
+                    <Collapsible>
+                      <CollapsibleTrigger className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 dark:hover:text-red-300 cursor-pointer mt-1">
+                        <ChevronDown className="w-3 h-3" />
+                        Technical Analysis
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <p className="text-xs text-red-600/70 dark:text-red-400/70 mt-2 bg-red-100/50 dark:bg-red-900/30 rounded-md p-2">
+                          {spamData.reason}
+                        </p>
+                      </CollapsibleContent>
+                    </Collapsible>
                     <div className="flex items-center gap-2 mt-3">
                       <Button
                         size="sm"
@@ -462,6 +678,8 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
             </div>
           )}
 
+          <LiquidUICard email={email} onArchive={onArchive} />
+
           {email.aiDraftReply && (
             <Card className="mt-6 border-primary/30 bg-primary/5" data-testid="pending-approval-card">
               <CardContent className="p-4">
@@ -469,10 +687,31 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
                   <Sparkles className="w-4 h-4 text-primary" />
                   <span className="text-sm font-semibold text-foreground">AI Draft Reply — Pending Your Approval</span>
                 </div>
-                <div className="bg-background rounded-md p-3 mb-4 border border-border">
+                <div className="bg-background rounded-md p-3 mb-3 border border-border">
                   <p className="text-sm text-foreground/80 whitespace-pre-wrap" data-testid="ai-draft-reply-text">
                     {email.aiDraftReply}
                   </p>
+                </div>
+                <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+                  {toneChips.map((chip) => (
+                    <Button
+                      key={chip.id}
+                      size="sm"
+                      variant="outline"
+                      className={cn(
+                        "text-[11px] h-6 px-2 rounded-full border-dashed",
+                        activeTone === chip.id && "opacity-70"
+                      )}
+                      disabled={toneMutation.isPending}
+                      onClick={() => toneMutation.mutate({ id: email.id, tone: chip.id })}
+                      data-testid={`tone-${chip.id}`}
+                    >
+                      {activeTone === chip.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                      ) : null}
+                      {chip.label}
+                    </Button>
+                  ))}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button

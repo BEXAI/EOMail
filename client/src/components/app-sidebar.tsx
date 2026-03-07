@@ -29,11 +29,14 @@ import {
   Settings,
   Mail,
   Sparkles,
-  Bot,
   Check,
   X,
   Loader2,
   ChevronDown,
+  DollarSign,
+  Calendar,
+  Shield,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +69,13 @@ const labels = [
   { id: "important", label: "Important", color: "bg-rose-500" },
 ];
 
+const agentConfig: Record<string, { icon: typeof DollarSign; color: string; bgColor: string; autonomy: string }> = {
+  "FinOps Auto-Resolver": { icon: DollarSign, color: "text-emerald-500", bgColor: "bg-emerald-500/10", autonomy: "L4" },
+  "Chrono-Logistics Coordinator": { icon: Calendar, color: "text-blue-500", bgColor: "bg-blue-500/10", autonomy: "L4" },
+  "Aegis Gatekeeper": { icon: Shield, color: "text-red-500", bgColor: "bg-red-500/10", autonomy: "L5" },
+  "AIMAIL Assistant": { icon: Sparkles, color: "text-purple-500", bgColor: "bg-purple-500/10", autonomy: "L4" },
+};
+
 function ActiveAgentsSection() {
   const { data: activities = [] } = useQuery<AgentActivity[]>({
     queryKey: ["/api/ai/activity"],
@@ -76,7 +86,7 @@ function ActiveAgentsSection() {
     },
   });
 
-  const recent = activities.slice(0, 5);
+  const recent = activities.slice(0, 8);
   const pendingCount = activities.filter((a) => a.status === "pending").length;
 
   if (recent.length === 0) return null;
@@ -98,27 +108,42 @@ function ActiveAgentsSection() {
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SidebarGroupContent>
-            <div className="space-y-1 px-2">
-              {recent.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="flex items-start gap-2 px-2 py-1.5 rounded-md text-xs"
-                  data-testid={`agent-activity-${activity.id}`}
-                >
-                  {activity.status === "pending" && (
-                    <Loader2 className="w-3 h-3 text-primary animate-spin shrink-0 mt-0.5" />
-                  )}
-                  {activity.status === "complete" && (
-                    <Check className="w-3 h-3 text-green-500 shrink-0 mt-0.5" />
-                  )}
-                  {activity.status === "error" && (
-                    <X className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
-                  )}
-                  <span className="text-muted-foreground leading-tight truncate">
-                    {activity.action}
-                  </span>
-                </div>
-              ))}
+            <div className="space-y-0.5 px-2">
+              {recent.map((activity) => {
+                const agent = agentConfig[activity.agentName || "AIMAIL Assistant"] || agentConfig["AIMAIL Assistant"];
+                const AgentIcon = agent.icon;
+                return (
+                  <div
+                    key={activity.id}
+                    className="flex items-start gap-2 px-2 py-1.5 rounded-md text-xs"
+                    data-testid={`agent-activity-${activity.id}`}
+                  >
+                    <div className={cn("w-4 h-4 rounded flex items-center justify-center shrink-0 mt-0.5", agent.bgColor)}>
+                      {activity.status === "pending" ? (
+                        <Loader2 className={cn("w-2.5 h-2.5 animate-spin", agent.color)} />
+                      ) : (
+                        <AgentIcon className={cn("w-2.5 h-2.5", agent.color)} />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <span className={cn("font-medium truncate", agent.color)} style={{ fontSize: "10px" }}>
+                          {activity.agentName || "AIMAIL Assistant"}
+                        </span>
+                        {activity.status === "complete" && (
+                          <Check className="w-2.5 h-2.5 text-green-500 shrink-0" />
+                        )}
+                        {activity.status === "error" && (
+                          <X className="w-2.5 h-2.5 text-red-500 shrink-0" />
+                        )}
+                      </div>
+                      <span className="text-muted-foreground leading-tight truncate block" style={{ fontSize: "11px" }}>
+                        {activity.action}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </SidebarGroupContent>
         </CollapsibleContent>
@@ -137,7 +162,7 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-base text-sidebar-foreground leading-tight tracking-tight">AIMAIL</span>
-            <span className="text-xs text-muted-foreground">.com</span>
+            <span className="text-[10px] text-muted-foreground leading-tight">Inbox Zero → Zero Time Spent</span>
           </div>
         </div>
         <Button

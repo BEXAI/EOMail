@@ -134,7 +134,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = req.user!.id;
       const email = await storage.getEmail(req.params.id, userId);
       if (!email) return res.status(404).json({ error: "Email not found" });
-      const draft = await draftReply(email, req.user!.displayName);
+      const tone = req.body?.tone as string | undefined;
+      const draft = await draftReply(email, req.user!.displayName, tone);
       const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: draft });
       res.json(updated);
     } catch (e) {
@@ -147,8 +148,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const userId = req.user!.id;
       const recentEmails = await storage.getEmails(userId, "all");
-      const briefing = await generateBriefing(recentEmails);
-      res.json({ briefing });
+      const activities = await storage.getAgentActivity(userId);
+
+      const agentCounts: Record<string, { complete: number; pending: number }> = {};
+      for (const a of activities) {
+        const name = a.agentName || "AIMAIL Assistant";
+        if (!agentCounts[name]) agentCounts[name] = { complete: 0, pending: 0 };
+        if (a.status === "complete") agentCounts[name].complete++;
+        else if (a.status === "pending") agentCounts[name].pending++;
+      }
+
+      const summaryParts = Object.entries(agentCounts)
+        .filter(([, c]) => c.complete > 0)
+        .map(([name, c]) => `${name}: ${c.complete} tasks completed`);
+      const agentSummary = summaryParts.length > 0 ? summaryParts.join("; ") : undefined;
+
+      const briefing = await generateBriefing(recentEmails, agentSummary);
+
+      const agentStats = Object.entries(agentCounts).map(([name, c]) => ({
+        name,
+        completed: c.complete,
+        pending: c.pending,
+      }));
+
+      res.json({ briefing, agentStats });
     } catch (e) {
       console.error("AI briefing error:", e);
       res.status(500).json({ error: "Failed to generate briefing" });

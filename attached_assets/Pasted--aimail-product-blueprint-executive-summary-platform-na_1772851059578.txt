@@ -1,0 +1,112 @@
+{
+  "aimail_product_blueprint": {
+    "executive_summary": {
+      "platform_name": "AIMAIL",
+      "tagline": "Physical Mail moved paper ➔ E-Mail moved text ➔ AI-Mail moves autonomous actions.",
+      "mission": "To evolve the inbox from a passive repository of chores into an autonomous, action-oriented Chief of Staff.",
+      "core_paradigm": "Shift the user goal from 'Inbox Zero' to 'Zero Time Spent'."
+    },
+    "agentic_ai_tools": [
+      {
+        "agent_id": "agent_01_finops",
+        "name": "FinOps Auto-Resolver",
+        "role": "Autonomous Financial Controller",
+        "autonomy_level": "Level 4 (High Autonomy)",
+        "description": "A silent, background agent that intercepts transactional emails, extracts data, and updates accounting ledgers without requiring human input.",
+        "trigger_conditions": [
+          "Incoming payment receipts (e.g., Stripe, PayPal, Square)",
+          "Attached PDF invoices from vendors and contractors",
+          "SaaS subscription renewal notices"
+        ],
+        "core_capabilities": [
+          "Semantic Intent Recognition: Automatically identifies financial documents among standard communications.",
+          "Headless Data Extraction: Silently downloads attachments, utilizing OCR and LLMs to extract line items, totals, taxes, and vendor details.",
+          "API Synchronization: Authenticates and logs expenses directly into QuickBooks, Xero, or Notion databases via secure APIs.",
+          "Automated Triage: Applies a 'Finance' label, archives the email, and updates the user's daily financial summary."
+        ],
+        "user_interaction": "Zero-touch. Executed in the background and reported in the daily 'Morning Briefing'."
+      },
+      {
+        "agent_id": "agent_02_scheduler",
+        "name": "Chrono-Logistics Coordinator",
+        "role": "Autonomous Scheduler & Location Mapper",
+        "autonomy_level": "Level 4 (High Autonomy)",
+        "description": "A proactive time-management engine that eliminates calendar ping-pong by negotiating meeting slots and factoring in real-world spatial constraints.",
+        "trigger_conditions": [
+          "Natural language meeting requests (e.g., 'Coffee chat next week', 'Let's sync')",
+          "Flight, transit, or hotel booking confirmations",
+          "Rescheduling requests from external parties"
+        ],
+        "core_capabilities": [
+          "Contextual Cross-Referencing: Analyzes the user's master calendar, focus blocks, and operating hours.",
+          "Spatial & Preference Awareness: Calculates physical transit times via Maps APIs and suggests locations based on the user's historical preferences.",
+          "M2M Protocol Negotiation: If the recipient uses AIMAIL, bypasses text to initiate a 0.05-second encrypted background JSON handshake, locking in an overlapping slot instantly.",
+          "Proactive Tone-Matched Drafting: If the recipient uses legacy email, auto-drafts a polite response mimicking the user's tone, offering three specific time slots with 1-click confirmation links."
+        ],
+        "user_interaction": "Passive. User receives a push notification once completed (e.g., 'Coffee with Priya confirmed for Tuesday at 10 AM. Added to calendar.')."
+      },
+      {
+        "agent_id": "agent_03_gatekeeper",
+        "name": "Aegis Gatekeeper & Negotiator",
+        "role": "Defensive Shield & Outbound Advocate",
+        "autonomy_level": "Level 5 (Full Agentic Action)",
+        "description": "A dual-purpose agent that protects the user's attention from malicious mail and actively fights for the user's financial resources via automated web interactions.",
+        "trigger_conditions": [
+          "Unsolicited cold outreach or sales pitches",
+          "Emails exhibiting semantic deviations (Impersonation/Deepfake risks)",
+          "Price hike notifications from SaaS or consumer services (e.g., Netflix)"
+        ],
+        "core_capabilities": [
+          "Proof of Intent (Anti-Spam): Quarantines cold pitches and issues invisible micro-challenges to the sender (e.g., 'My user requires a 3-bullet ROI summary to proceed'). Failures are trashed.",
+          "Deepfake & Phishing Shield: Analyzes linguistic baseline patterns and routing metadata. Flags CEO-fraud or AI-impersonation with massive visual warnings ('98% AI-Impersonation Probability').",
+          "Headless Browser Negotiation: When authorized, spins up an invisible browser (Puppeteer/Playwright), navigates to a merchant's customer support chat, and deploys LLM-driven retention scripts to haggle monthly bills down or cancel services."
+        ],
+        "user_interaction": "Human-in-the-loop for negotiations (1-click 'Negotiate or Cancel'). Fully autonomous for spam/threat defense."
+      }
+    ],
+    "dynamic_ui_architecture": {
+      "concept": "Liquid UI",
+      "description": "Emails transform from static text walls into interactive micro-apps based on intent, eliminating the need to open external tabs.",
+      "features": [
+        {
+          "name": "Interactive Payloads",
+          "example": "A GitHub PR email renders as a live code-diff widget with an [Approve & Merge] button natively in the inbox pane."
+        },
+        {
+          "name": "Live Document Summaries",
+          "example": "The AI pre-reads attached PDFs (e.g., Q4 Roadmap), compares them to previous versions, and injects a 3-bullet contextual diff-summary at the top of the reading pane alongside an [Approve] button."
+        }
+      ]
+    },
+    "psychological_workflow_shifts": {
+      "the_approval_queue": {
+        "replaces": "Drafts Folder",
+        "mechanism": "Instead of writing emails, users approve them. The AI analyzes 10,000+ past sent messages to clone tone/vocabulary, pre-drafting responses. Users simply swipe right to send or type micro-prompts (e.g., 'Make it more assertive')."
+      },
+      "the_morning_briefing": {
+        "replaces": "Empty Inbox Screen",
+        "mechanism": "When logging in, the empty right pane acts as a daily dashboard. A synthesized voice/text brief summarizes background actions: 'Good morning. I auto-archived 12 newsletters, logged 1 Stripe receipt, and scheduled Priya for Tuesday.'"
+      }
+    },
+    "technical_infrastructure": {
+      "m2m_invisible_protocols": "A proprietary background communication layer. When two AIMAIL accounts interact, they bypass SMTP and human language entirely, exchanging encrypted JSON payloads to resolve logistics and negotiations instantly.",
+      "headless_automation_engine": "Server-side integration of cloud-based browser automation tools allowing agents to interact with external websites, portals, and customer service bots on the user's behalf."
+    },
+    "mvp_implementation_roadmap": {
+      "phase_1_ui_and_psychology": [
+        "Rename 'Drafts' to 'Pending Approvals' to shift user mindset.",
+        "Implement 'Agent Status Spinners' next to left-hand labels to visually indicate AI agents working in the background.",
+        "Add a Cmd+K 'AI Action Center' in the empty reading pane for natural language global inbox commands."
+      ],
+      "phase_2_agent_deployment": [
+        "Launch the FinOps Auto-Resolver with basic Stripe and QuickBooks API hooks.",
+        "Launch the Chrono-Logistics Coordinator with bidirectional Google Calendar/Outlook sync.",
+        "Introduce the Proof-of-Intent Gatekeeper to establish immediate user trust by neutralizing cold spam."
+      ],
+      "phase_3_advanced_autonomy": [
+        "Publish and deploy the AIMAIL JSON-RPC M2M protocol for user-to-user background negotiation.",
+        "Roll out Headless Browser Negotiation features for the top 20 most common consumer subscriptions."
+      ]
+    }
+  }
+}

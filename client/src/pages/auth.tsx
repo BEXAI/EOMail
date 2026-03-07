@@ -20,14 +20,19 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary">
-            <span className="text-primary-foreground font-bold text-xl">AI</span>
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary">
+              <span className="text-primary-foreground font-bold text-xl">AI</span>
+            </div>
+            <div className="text-left">
+              <h1 className="text-3xl font-bold text-foreground tracking-tight">AIMAIL</h1>
+              <p className="text-xs text-muted-foreground">.com</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">AIMAIL</h1>
-            <p className="text-xs text-muted-foreground">.com</p>
-          </div>
+          <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+            Your autonomous Chief of Staff. From Inbox Zero to <span className="font-medium text-foreground">Zero Time Spent.</span>
+          </p>
         </div>
 
         <Tabs defaultValue="login" className="w-full">

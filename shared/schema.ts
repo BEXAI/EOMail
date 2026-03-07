@@ -50,6 +50,7 @@ export const emails = pgTable("emails", {
 export const agentActivity = pgTable("agent_activity", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  agentName: text("agent_name"),
   action: text("action").notNull(),
   status: text("status").notNull().default("pending"),
   emailId: varchar("email_id"),

@@ -13,6 +13,9 @@ import {
   Loader2,
   ArrowRight,
   Zap,
+  DollarSign,
+  Calendar,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,11 +25,23 @@ interface MorningBriefingProps {
   onSelectEmail: (email: Email) => void;
 }
 
+interface BriefingData {
+  briefing: string;
+  agentStats?: { name: string; completed: number; pending: number }[];
+}
+
+const agentIcons: Record<string, { icon: typeof DollarSign; color: string; bgColor: string }> = {
+  "FinOps Auto-Resolver": { icon: DollarSign, color: "text-emerald-600 dark:text-emerald-400", bgColor: "bg-emerald-100 dark:bg-emerald-900" },
+  "Chrono-Logistics Coordinator": { icon: Calendar, color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-900" },
+  "Aegis Gatekeeper": { icon: Shield, color: "text-red-600 dark:text-red-400", bgColor: "bg-red-100 dark:bg-red-900" },
+  "AIMAIL Assistant": { icon: Sparkles, color: "text-purple-600 dark:text-purple-400", bgColor: "bg-purple-100 dark:bg-purple-900" },
+};
+
 export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBriefingProps) {
   const queryClient = useQueryClient();
   const firstName = userName?.split(" ")[0] || "there";
 
-  const { data: briefingData, isLoading: briefingLoading } = useQuery<{ briefing: string }>({
+  const { data: briefingData, isLoading: briefingLoading } = useQuery<BriefingData>({
     queryKey: ["/api/ai/briefing"],
   });
 
@@ -61,11 +76,13 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
     low: "bg-green-500",
   };
 
+  const agentStats = briefingData?.agentStats || [];
+
   return (
     <div className="flex flex-col h-full overflow-y-auto" data-testid="morning-briefing">
       <div className="max-w-2xl mx-auto w-full px-6 py-8 space-y-6">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mx-auto mb-4 border border-primary/10">
             <Sparkles className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-2xl font-bold text-foreground" data-testid="briefing-greeting">
@@ -78,6 +95,9 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
               day: "numeric",
               year: "numeric",
             })}
+          </p>
+          <p className="text-xs text-muted-foreground/60 mt-0.5 italic">
+            From Inbox Zero → Zero Time Spent
           </p>
         </div>
 
@@ -105,11 +125,11 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
           </Card>
         </div>
 
-        <Card className="border-border bg-primary/5">
+        <Card className="border-border bg-gradient-to-br from-primary/5 to-transparent">
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="w-4 h-4 text-primary" />
-              <span className="text-sm font-semibold text-foreground">AI Briefing</span>
+              <span className="text-sm font-semibold text-foreground">Chief of Staff Briefing</span>
             </div>
             {briefingLoading ? (
               <div className="space-y-2">
@@ -124,6 +144,36 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
             )}
           </CardContent>
         </Card>
+
+        {agentStats.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <Brain className="w-4 h-4 text-purple-500" />
+              Agent Activity Summary
+            </h3>
+            <div className="grid grid-cols-2 gap-2">
+              {agentStats.filter(a => a.completed > 0 || a.pending > 0).map((agent) => {
+                const config = agentIcons[agent.name] || agentIcons["AIMAIL Assistant"];
+                const AgentIcon = config.icon;
+                return (
+                  <Card key={agent.name} className="border-border">
+                    <CardContent className="p-3 flex items-center gap-3">
+                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", config.bgColor)}>
+                        <AgentIcon className={cn("w-4 h-4", config.color)} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{agent.name}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {agent.completed} completed{agent.pending > 0 ? `, ${agent.pending} active` : ""}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {unprocessedCount > 0 && (
           <Button
@@ -193,7 +243,7 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
 
         <div className="text-center pt-4">
           <p className="text-xs text-muted-foreground">
-            Press <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">⌘K</kbd> to open AI Command Bar
+            Press <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">⌘K</kbd> to open AI Action Center
           </p>
         </div>
       </div>
