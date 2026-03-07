@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DOMPurify from "dompurify";
 import { type Email } from "@shared/schema";
 import { getInitials, getSenderColor, cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -638,7 +639,7 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
 
           <div
             className="prose prose-sm max-w-none text-foreground [&_p]:mb-3 [&_ul]:mb-3 [&_ol]:mb-3 [&_li]:mb-1 [&_strong]:font-semibold [&_a]:text-primary [&_a]:underline"
-            dangerouslySetInnerHTML={{ __html: email.body }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(email.body) }}
             data-testid="email-body"
           />
 

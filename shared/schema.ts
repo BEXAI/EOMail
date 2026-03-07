@@ -74,4 +74,3 @@ export type AgentActivity = typeof agentActivity.$inferSelect;
 
 export type EmailFolder = "inbox" | "starred" | "sent" | "drafts" | "archive" | "spam" | "trash" | "all";
 
-export * from "./models/chat";

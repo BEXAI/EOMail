@@ -2,11 +2,10 @@ import OpenAI from "openai";
 import type { Email } from "@shared/schema";
 
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-const MODEL = "gpt-5-mini";
+const MODEL = "gpt-4o-mini";
 
 export async function summarizeEmail(subject: string, body: string): Promise<string> {
   const plainBody = body.replace(/<[^>]*>/g, "").trim();

@@ -24,6 +24,14 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 50,
+  message: { error: "AI request limit reached. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const emailUpdateSchema = z.object({
   read: z.boolean().optional(),
   starred: z.boolean().optional(),
@@ -53,6 +61,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.use("/api/", apiLimiter);
   app.use("/api/auth/login", authLimiter);
   app.use("/api/auth/register", authLimiter);
+  app.use("/api/ai/", aiLimiter);
   app.get("/api/emails", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;

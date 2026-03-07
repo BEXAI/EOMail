@@ -22,6 +22,10 @@ declare global {
 }
 
 export function setupAuth(app: Express) {
+  if (!process.env.SESSION_SECRET) {
+    throw new Error("SESSION_SECRET environment variable is required");
+  }
+
   const PgSession = connectPgSimple(session);
 
   app.use(
@@ -31,7 +35,7 @@ export function setupAuth(app: Express) {
         tableName: "session",
         createTableIfMissing: false,
       }),
-      secret: process.env.SESSION_SECRET || "eomail-dev-secret",
+      secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
       cookie: {
@@ -114,8 +118,6 @@ export function setupAuth(app: Express) {
         displayName,
         avatarInitials: initials,
       });
-
-      await storage.seedEmailsForUser(user.id);
 
       const { password: _, ...safeUser } = user;
       req.login(safeUser as Express.User, (err) => {
