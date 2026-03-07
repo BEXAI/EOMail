@@ -495,7 +495,7 @@ export default function MailPage() {
 
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className={cn("flex w-full bg-background overflow-hidden transition-all duration-300", chatPanelOpen && chatPanelExpanded ? "h-[67vh]" : chatPanelOpen && !chatPanelExpanded ? "h-[calc(100vh-48px)]" : "h-screen")}>
+      <div className="flex w-full bg-background overflow-hidden h-screen">
         <AppSidebar
           onCompose={handleCompose}
           counts={counts}
@@ -676,7 +676,7 @@ export default function MailPage() {
       />
 
       <AiCommandBar open={commandBarOpen} onOpenChange={setCommandBarOpen} />
-      <AiChatPanel isOpen={chatPanelOpen} onToggle={() => setChatPanelOpen(false)} onExpandChange={setChatPanelExpanded} />
+      <AiChatPanel isOpen={chatPanelOpen} onToggle={() => setChatPanelOpen(!chatPanelOpen)} onExpandChange={setChatPanelExpanded} />
     </SidebarProvider>
   );
 }
