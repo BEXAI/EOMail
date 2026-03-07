@@ -9,7 +9,7 @@ services:
     name: eomail
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build && npm run db:push
+    buildCommand: npm ci --include=dev && npm run build && npm run db:push
     startCommand: npm run start
     envVars:
       - key: NODE_ENV
