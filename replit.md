@@ -68,6 +68,7 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - `client/src/components/email-list.tsx` - Email list with AI urgency dots, category badges
 - `client/src/components/email-detail.tsx` - Email detail with AI Insights, Liquid UI cards, enhanced Gatekeeper, tone micro-prompts
 - `client/src/components/compose-dialog.tsx` - Compose/reply dialog with prefill support
+- `client/src/components/theme-toggle.tsx` - Dark/light mode toggle component
 - `client/src/components/morning-briefing.tsx` - Chief of Staff briefing dashboard with agent stats
 - `client/src/components/ai-command-bar.tsx` - Agent-grouped AI Action Center (Cmd+K)
 - `server/ai.ts` - AI service functions with tone support and enhanced spam analysis

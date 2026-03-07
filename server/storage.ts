@@ -2,6 +2,8 @@ import { type User, type InsertUser, type Email, type InsertEmail, type AgentAct
 import { db } from "./db";
 import { eq, and, or, ilike, desc, inArray, ne, sql, isNotNull } from "drizzle-orm";
 
+type EmailUpdates = Partial<Pick<Email, "read" | "starred" | "folder" | "labels" | "aiSummary" | "aiCategory" | "aiUrgency" | "aiSuggestedAction" | "aiDraftReply" | "aiSpamScore" | "aiSpamReason" | "aiProcessed">>;
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -10,16 +12,14 @@ export interface IStorage {
   getEmails(userId: string, folder: string, search?: string, label?: string): Promise<Email[]>;
   getEmail(id: string, userId: string): Promise<Email | undefined>;
   createEmail(email: InsertEmail): Promise<Email>;
-  updateEmail(id: string, userId: string, updates: Partial<Email>): Promise<Email | undefined>;
-  updateEmails(ids: string[], userId: string, updates: Partial<Email>): Promise<Email[]>;
+  updateEmail(id: string, userId: string, updates: EmailUpdates): Promise<Email | undefined>;
+  updateEmails(ids: string[], userId: string, updates: EmailUpdates): Promise<Email[]>;
   deleteEmail(id: string, userId: string): Promise<boolean>;
   deleteEmails(ids: string[], userId: string): Promise<number>;
   getEmailCounts(userId: string): Promise<Record<string, number>>;
   seedEmailsForUser(userId: string): Promise<void>;
 
   getUnprocessedEmails(userId: string): Promise<Email[]>;
-  getPendingApprovals(userId: string): Promise<Email[]>;
-  getPendingApprovalCount(userId: string): Promise<number>;
 
   getAgentActivity(userId: string): Promise<AgentActivity[]>;
   createAgentActivity(data: InsertAgentActivity): Promise<AgentActivity>;
@@ -42,7 +42,7 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async getEmails(userId: string, folder: string, search?: string, label?: string): Promise<Email[]> {
+  private buildFolderConditions(userId: string, folder: string) {
     const conditions = [eq(emails.userId, userId)];
 
     if (folder === "starred") {
@@ -58,6 +58,12 @@ export class DatabaseStorage implements IStorage {
     } else {
       conditions.push(eq(emails.folder, folder));
     }
+
+    return conditions;
+  }
+
+  async getEmails(userId: string, folder: string, search?: string, label?: string): Promise<Email[]> {
+    const conditions = this.buildFolderConditions(userId, folder);
 
     if (label) {
       conditions.push(sql`${label} = ANY(${emails.labels})`);
@@ -95,22 +101,20 @@ export class DatabaseStorage implements IStorage {
     return email;
   }
 
-  async updateEmail(id: string, userId: string, updates: Partial<Email>): Promise<Email | undefined> {
-    const { id: _id, userId: _uid, createdAt: _ca, ...safeUpdates } = updates as any;
+  async updateEmail(id: string, userId: string, updates: EmailUpdates): Promise<Email | undefined> {
     const [email] = await db
       .update(emails)
-      .set(safeUpdates)
+      .set(updates)
       .where(and(eq(emails.id, id), eq(emails.userId, userId)))
       .returning();
     return email;
   }
 
-  async updateEmails(ids: string[], userId: string, updates: Partial<Email>): Promise<Email[]> {
+  async updateEmails(ids: string[], userId: string, updates: EmailUpdates): Promise<Email[]> {
     if (ids.length === 0) return [];
-    const { id: _id, userId: _uid, createdAt: _ca, ...safeUpdates } = updates as any;
     return db
       .update(emails)
-      .set(safeUpdates)
+      .set(updates)
       .where(and(inArray(emails.id, ids), eq(emails.userId, userId)))
       .returning();
   }
@@ -133,26 +137,39 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEmailCounts(userId: string): Promise<Record<string, number>> {
-    const allEmails = await db
+    const rows = await db
       .select({
         folder: emails.folder,
         read: emails.read,
         starred: emails.starred,
-        aiDraftReply: emails.aiDraftReply,
+        hasDraft: sql<boolean>`${emails.aiDraftReply} IS NOT NULL`,
       })
       .from(emails)
       .where(eq(emails.userId, userId));
 
-    return {
-      inbox: allEmails.filter((e) => e.folder === "inbox" && !e.read).length,
-      starred: allEmails.filter((e) => e.starred && e.folder !== "trash").length,
-      sent: allEmails.filter((e) => e.folder === "sent").length,
-      drafts: allEmails.filter((e) => e.folder === "drafts").length,
-      spam: allEmails.filter((e) => e.folder === "spam").length,
-      trash: allEmails.filter((e) => e.folder === "trash").length,
-      all: allEmails.filter((e) => e.folder !== "trash" && e.folder !== "spam").length,
-      "pending-approvals": allEmails.filter((e) => e.aiDraftReply && e.folder !== "sent" && e.folder !== "trash").length,
+    const counts: Record<string, number> = {
+      inbox: 0,
+      starred: 0,
+      sent: 0,
+      drafts: 0,
+      spam: 0,
+      trash: 0,
+      all: 0,
+      "pending-approvals": 0,
     };
+
+    for (const row of rows) {
+      if (row.folder === "inbox" && !row.read) counts.inbox++;
+      if (row.starred && row.folder !== "trash") counts.starred++;
+      if (row.folder === "sent") counts.sent++;
+      if (row.folder === "drafts") counts.drafts++;
+      if (row.folder === "spam") counts.spam++;
+      if (row.folder === "trash") counts.trash++;
+      if (row.folder !== "trash" && row.folder !== "spam") counts.all++;
+      if (row.hasDraft && row.folder !== "sent" && row.folder !== "trash") counts["pending-approvals"]++;
+    }
+
+    return counts;
   }
 
   async getUnprocessedEmails(userId: string): Promise<Email[]> {
@@ -161,36 +178,6 @@ export class DatabaseStorage implements IStorage {
       .from(emails)
       .where(and(eq(emails.userId, userId), eq(emails.aiProcessed, false)))
       .orderBy(desc(emails.timestamp));
-  }
-
-  async getPendingApprovals(userId: string): Promise<Email[]> {
-    return db
-      .select()
-      .from(emails)
-      .where(
-        and(
-          eq(emails.userId, userId),
-          isNotNull(emails.aiDraftReply),
-          ne(emails.folder, "sent"),
-          ne(emails.folder, "trash")
-        )
-      )
-      .orderBy(desc(emails.timestamp));
-  }
-
-  async getPendingApprovalCount(userId: string): Promise<number> {
-    const result = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(emails)
-      .where(
-        and(
-          eq(emails.userId, userId),
-          isNotNull(emails.aiDraftReply),
-          ne(emails.folder, "sent"),
-          ne(emails.folder, "trash")
-        )
-      );
-    return Number(result[0]?.count || 0);
   }
 
   async getAgentActivity(userId: string): Promise<AgentActivity[]> {

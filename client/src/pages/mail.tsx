@@ -7,6 +7,7 @@ import { EmailDetail } from "@/components/email-detail";
 import { ComposeDialog, type ComposeData } from "@/components/compose-dialog";
 import { MorningBriefing } from "@/components/morning-briefing";
 import { AiCommandBar } from "@/components/ai-command-bar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   SidebarProvider,
   SidebarTrigger,
@@ -18,11 +19,8 @@ import { Separator } from "@/components/ui/separator";
 import {
   Search,
   RefreshCw,
-  Settings,
   X,
   SlidersHorizontal,
-  Moon,
-  Sun,
   Keyboard,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
@@ -45,31 +43,6 @@ const FOLDER_LABELS: Record<string, string> = {
   all: "All Mail",
 };
 
-function ThemeToggle() {
-  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
-
-  const toggle = () => {
-    document.documentElement.classList.toggle("dark");
-    const isDark = document.documentElement.classList.contains("dark");
-    setDark(isDark);
-    localStorage.setItem("theme", isDark ? "dark" : "light");
-  };
-
-  useEffect(() => {
-    const saved = localStorage.getItem("theme");
-    if (saved === "dark") {
-      document.documentElement.classList.add("dark");
-      setDark(true);
-    }
-  }, []);
-
-  return (
-    <Button size="icon" variant="ghost" onClick={toggle} data-testid="button-theme-toggle">
-      {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-    </Button>
-  );
-}
-
 export default function MailPage() {
   const [folder, setFolder] = useState<string>("inbox");
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
@@ -80,7 +53,6 @@ export default function MailPage() {
   const [searchInput, setSearchInput] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-  const [pendingSend, setPendingSend] = useState<ComposeData | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -109,6 +81,17 @@ export default function MailPage() {
     queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
     queryClient.invalidateQueries({ queryKey: ["/api/ai/activity"] });
   }, [queryClient]);
+
+  const closeCompose = useCallback(() => {
+    setComposing(false);
+    setReplyTo(null);
+    setComposePrefill(null);
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    setSearch("");
+    setSearchInput("");
+  }, []);
 
   const markReadMutation = useMutation({
     mutationFn: async ({ id, read }: { id: string; read: boolean }) => {
@@ -203,20 +186,18 @@ export default function MailPage() {
 
   const bulkMutation = useMutation({
     mutationFn: async ({ ids, action }: { ids: string[]; action: string }) => {
-      if (action === "delete") {
-        if (folder === "trash") {
-          await apiRequest("POST", "/api/emails/bulk", { ids, action: "delete" });
-        } else {
-          await apiRequest("POST", "/api/emails/bulk", { ids, action: "update", updates: { folder: "trash" } });
-        }
-      } else if (action === "read") {
-        await apiRequest("POST", "/api/emails/bulk", { ids, action: "update", updates: { read: true } });
-      } else if (action === "unread") {
-        await apiRequest("POST", "/api/emails/bulk", { ids, action: "update", updates: { read: false } });
-      } else if (action === "star") {
-        await apiRequest("POST", "/api/emails/bulk", { ids, action: "update", updates: { starred: true } });
-      } else if (action === "archive") {
-        await apiRequest("POST", "/api/emails/bulk", { ids, action: "update", updates: { folder: "all" } });
+      const bulkUpdates: Record<string, { action: string; updates?: Record<string, any> }> = {
+        delete: folder === "trash"
+          ? { action: "delete" }
+          : { action: "update", updates: { folder: "trash" } },
+        read: { action: "update", updates: { read: true } },
+        unread: { action: "update", updates: { read: false } },
+        star: { action: "update", updates: { starred: true } },
+        archive: { action: "update", updates: { folder: "all" } },
+      };
+      const config = bulkUpdates[action];
+      if (config) {
+        await apiRequest("POST", "/api/emails/bulk", { ids, ...config });
       }
     },
     onSuccess: (_, { action }) => {
@@ -233,43 +214,36 @@ export default function MailPage() {
     },
   });
 
-  const handleSelectEmail = (email: Email) => {
+  const handleSelectEmail = useCallback((email: Email) => {
     setSelectedEmail(email);
     if (!email.read) markReadMutation.mutate({ id: email.id, read: true });
-  };
+  }, [markReadMutation]);
 
-  const handleFolderChange = (newFolder: string) => {
+  const handleFolderChange = useCallback((newFolder: string) => {
     setFolder(newFolder);
     setSelectedEmail(null);
-    setSearch("");
-    setSearchInput("");
-  };
+    clearSearch();
+  }, [clearSearch]);
 
-  const handleLabelFilter = (label: string | null) => {
+  const handleLabelFilter = useCallback((label: string | null) => {
     setLabelFilter(label);
     setSelectedEmail(null);
     if (label) {
       setFolder("inbox");
-      setSearch("");
-      setSearchInput("");
+      clearSearch();
     }
-  };
+  }, [clearSearch]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setSearch(searchInput);
   };
 
-  const clearSearch = () => {
-    setSearch("");
-    setSearchInput("");
-  };
-
-  const handleReply = (email: Email) => {
+  const handleReply = useCallback((email: Email) => {
     setReplyTo(email);
     setComposePrefill(null);
     setComposing(true);
-  };
+  }, []);
 
   const handleRefresh = () => {
     invalidateAll();
@@ -278,7 +252,6 @@ export default function MailPage() {
 
   const handleSend = (data: ComposeData) => {
     setComposing(false);
-    setPendingSend(data);
 
     const { dismiss } = toast({
       title: "Sending...",
@@ -290,7 +263,6 @@ export default function MailPage() {
           onClick={() => {
             if (undoTimer) clearTimeout(undoTimer);
             setUndoTimer(null);
-            setPendingSend(null);
             dismiss();
             setComposing(true);
             toast({ title: "Send cancelled" });
@@ -305,26 +277,24 @@ export default function MailPage() {
 
     const timer = setTimeout(() => {
       sendMutation.mutate(data);
-      setPendingSend(null);
       setUndoTimer(null);
-      setReplyTo(null);
-      setComposePrefill(null);
+      closeCompose();
     }, 5000);
 
     setUndoTimer(timer);
   };
 
-  const handleCompose = () => {
+  const handleCompose = useCallback(() => {
     setReplyTo(null);
     setComposePrefill(null);
     setComposing(true);
-  };
+  }, []);
 
-  const handleComposeWithPrefill = (prefill: { to: string; subject: string; body: string }) => {
+  const handleComposeWithPrefill = useCallback((prefill: { to: string; subject: string; body: string }) => {
     setReplyTo(null);
     setComposePrefill(prefill);
     setComposing(true);
-  };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -379,9 +349,7 @@ export default function MailPage() {
           break;
         case "Escape":
           if (composing) {
-            setComposing(false);
-            setReplyTo(null);
-            setComposePrefill(null);
+            closeCompose();
           } else if (selectedEmail) {
             setSelectedEmail(null);
           }
@@ -414,7 +382,7 @@ export default function MailPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedEmail, composing, emails]);
+  }, [selectedEmail, composing, emails, handleCompose, handleReply, handleSelectEmail, closeCompose]);
 
   const sidebarStyle = {
     "--sidebar-width": "15rem",
@@ -424,6 +392,14 @@ export default function MailPage() {
   const headerTitle = labelFilter
     ? `Label: ${labelFilter.charAt(0).toUpperCase() + labelFilter.slice(1)}`
     : FOLDER_LABELS[folder] || folder;
+
+  const emailActions = {
+    onStar: (id: string, starred: boolean) => starMutation.mutate({ id, starred }),
+    onDelete: (id: string) => deleteMutation.mutate(id),
+    onMarkRead: (id: string, read: boolean) => markReadMutation.mutate({ id, read }),
+    onMove: (id: string, targetFolder: string) => moveMutation.mutate({ id, targetFolder }),
+    onArchive: (id: string) => archiveMutation.mutate(id),
+  };
 
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
@@ -546,11 +522,7 @@ export default function MailPage() {
                   isLoading={emailsLoading}
                   selectedId={selectedEmail?.id ?? null}
                   onSelect={handleSelectEmail}
-                  onStar={(id, starred) => starMutation.mutate({ id, starred })}
-                  onDelete={(id) => deleteMutation.mutate(id)}
-                  onMarkRead={(id, read) => markReadMutation.mutate({ id, read })}
-                  onMove={(id, targetFolder) => moveMutation.mutate({ id, targetFolder })}
-                  onArchive={(id) => archiveMutation.mutate(id)}
+                  {...emailActions}
                   onBulkAction={(ids, action) => bulkMutation.mutate({ ids, action })}
                   folder={folder}
                   search={search}
@@ -564,12 +536,8 @@ export default function MailPage() {
                 <EmailDetail
                   email={selectedEmail}
                   onBack={() => setSelectedEmail(null)}
-                  onStar={(id, starred) => starMutation.mutate({ id, starred })}
-                  onDelete={(id) => deleteMutation.mutate(id)}
+                  {...emailActions}
                   onReply={handleReply}
-                  onMarkRead={(id, read) => markReadMutation.mutate({ id, read })}
-                  onMove={(id, targetFolder) => moveMutation.mutate({ id, targetFolder })}
-                  onArchive={(id) => archiveMutation.mutate(id)}
                   onCompose={handleComposeWithPrefill}
                 />
               </div>
@@ -590,7 +558,7 @@ export default function MailPage() {
 
       <ComposeDialog
         isOpen={composing}
-        onClose={() => { setComposing(false); setReplyTo(null); setComposePrefill(null); }}
+        onClose={closeCompose}
         onSend={handleSend}
         isSending={sendMutation.isPending}
         replyTo={replyTo}
