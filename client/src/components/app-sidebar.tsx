@@ -37,6 +37,8 @@ import {
   Calendar,
   Shield,
   Bot,
+  Archive,
+  FileEdit,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +58,9 @@ const folders = [
   { id: "inbox", label: "Inbox", icon: Inbox, countKey: "inbox" },
   { id: "starred", label: "Starred", icon: Star, countKey: "starred" },
   { id: "sent", label: "Sent", icon: Send, countKey: "sent" },
+  { id: "drafts", label: "Drafts", icon: FileEdit, countKey: "drafts" },
   { id: "pending-approvals", label: "Pending Approvals", icon: Sparkles, countKey: "pending-approvals" },
+  { id: "archive", label: "Archive", icon: Archive, countKey: "archive" },
   { id: "spam", label: "Spam", icon: AlertTriangle, countKey: "spam" },
   { id: "trash", label: "Trash", icon: Trash2, countKey: "trash" },
   { id: "all", label: "All Mail", icon: Mail, countKey: "all" },

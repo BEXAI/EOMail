@@ -72,6 +72,6 @@ export const insertAgentActivitySchema = createInsertSchema(agentActivity).omit(
 export type InsertAgentActivity = z.infer<typeof insertAgentActivitySchema>;
 export type AgentActivity = typeof agentActivity.$inferSelect;
 
-export type EmailFolder = "inbox" | "starred" | "sent" | "drafts" | "spam" | "trash" | "all";
+export type EmailFolder = "inbox" | "starred" | "sent" | "drafts" | "archive" | "spam" | "trash" | "all";
 
 export * from "./models/chat";

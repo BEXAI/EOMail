@@ -2,7 +2,7 @@ import { type User, type InsertUser, type Email, type InsertEmail, type AgentAct
 import { db } from "./db";
 import { eq, and, or, ilike, desc, inArray, ne, sql, isNotNull } from "drizzle-orm";
 
-type EmailUpdates = Partial<Pick<Email, "read" | "starred" | "folder" | "labels" | "aiSummary" | "aiCategory" | "aiUrgency" | "aiSuggestedAction" | "aiDraftReply" | "aiSpamScore" | "aiSpamReason" | "aiProcessed">>;
+type EmailUpdates = Partial<Pick<Email, "read" | "starred" | "folder" | "labels" | "to" | "toEmail" | "cc" | "bcc" | "subject" | "body" | "preview" | "aiSummary" | "aiCategory" | "aiUrgency" | "aiSuggestedAction" | "aiDraftReply" | "aiSpamScore" | "aiSpamReason" | "aiProcessed">>;
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -51,6 +51,7 @@ export class DatabaseStorage implements IStorage {
     } else if (folder === "all") {
       conditions.push(ne(emails.folder, "trash"));
       conditions.push(ne(emails.folder, "spam"));
+      conditions.push(ne(emails.folder, "archive"));
     } else if (folder === "pending-approvals") {
       conditions.push(isNotNull(emails.aiDraftReply));
       conditions.push(ne(emails.folder, "sent"));
@@ -152,6 +153,7 @@ export class DatabaseStorage implements IStorage {
       starred: 0,
       sent: 0,
       drafts: 0,
+      archive: 0,
       spam: 0,
       trash: 0,
       all: 0,
@@ -163,9 +165,10 @@ export class DatabaseStorage implements IStorage {
       if (row.starred && row.folder !== "trash") counts.starred++;
       if (row.folder === "sent") counts.sent++;
       if (row.folder === "drafts") counts.drafts++;
+      if (row.folder === "archive") counts.archive++;
       if (row.folder === "spam") counts.spam++;
       if (row.folder === "trash") counts.trash++;
-      if (row.folder !== "trash" && row.folder !== "spam") counts.all++;
+      if (row.folder !== "trash" && row.folder !== "spam" && row.folder !== "archive") counts.all++;
       if (row.hasDraft && row.folder !== "sent" && row.folder !== "trash") counts["pending-approvals"]++;
     }
 
@@ -385,6 +388,22 @@ export class DatabaseStorage implements IStorage {
         folder: "drafts",
         labels: [],
         attachments: 0,
+      },
+      {
+        userId,
+        from: "AWS",
+        fromEmail: "no-reply@aws.amazon.com",
+        to: "You",
+        toEmail: "me@aimail.com",
+        subject: "Your AWS bill for February 2026 is available",
+        body: `<p>Hello,</p><p>Your AWS bill for <strong>February 2026</strong> is now available.</p><p><strong>Total: $142.87</strong></p><p>Services breakdown:</p><ul><li>EC2: $68.20</li><li>S3: $12.45</li><li>RDS: $52.00</li><li>Other: $10.22</li></ul><p><a href="#">View your bill</a> | <a href="#">Set up a payment method</a></p>`,
+        preview: "Your AWS bill for February 2026 is available. Total: $142.87",
+        timestamp: day(6),
+        read: true,
+        starred: false,
+        folder: "archive",
+        labels: ["finance"],
+        attachments: 1,
       },
       {
         userId,

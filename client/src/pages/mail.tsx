@@ -37,7 +37,9 @@ const FOLDER_LABELS: Record<string, string> = {
   inbox: "Inbox",
   starred: "Starred",
   sent: "Sent",
+  drafts: "Drafts",
   "pending-approvals": "Pending Approvals",
+  archive: "Archive",
   spam: "Spam",
   trash: "Trash",
   all: "All Mail",
@@ -49,6 +51,7 @@ export default function MailPage() {
   const [composing, setComposing] = useState(false);
   const [replyTo, setReplyTo] = useState<Email | null>(null);
   const [composePrefill, setComposePrefill] = useState<{ to: string; subject: string; body: string } | null>(null);
+  const [editingDraft, setEditingDraft] = useState<Email | null>(null);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
@@ -86,6 +89,7 @@ export default function MailPage() {
     setComposing(false);
     setReplyTo(null);
     setComposePrefill(null);
+    setEditingDraft(null);
   }, []);
 
   const clearSearch = useCallback(() => {
@@ -145,7 +149,7 @@ export default function MailPage() {
 
   const archiveMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("PATCH", `/api/emails/${id}`, { folder: "all" });
+      await apiRequest("PATCH", `/api/emails/${id}`, { folder: "archive" });
     },
     onSuccess: (_, id) => {
       invalidateAll();
@@ -155,7 +159,7 @@ export default function MailPage() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: async (data: ComposeData) => {
+    mutationFn: async (data: ComposeData & { draftId?: string }) => {
       const now = new Date();
       await apiRequest("POST", "/api/emails", {
         from: user?.displayName || "You",
@@ -174,6 +178,9 @@ export default function MailPage() {
         labels: [],
         attachments: 0,
       });
+      if (data.draftId) {
+        await apiRequest("DELETE", `/api/emails/${data.draftId}`);
+      }
     },
     onSuccess: () => {
       invalidateAll();
@@ -181,6 +188,49 @@ export default function MailPage() {
     },
     onError: () => {
       toast({ title: "Failed to send", description: "Something went wrong. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const saveDraftMutation = useMutation({
+    mutationFn: async (data: ComposeData & { draftId?: string }) => {
+      const now = new Date();
+      if (data.draftId) {
+        await apiRequest("PATCH", `/api/emails/${data.draftId}`, {
+          to: data.to.split("@")[0] || data.to || "Draft",
+          toEmail: data.to || "",
+          cc: data.cc || "",
+          bcc: data.bcc || "",
+          subject: data.subject || "(no subject)",
+          body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
+          preview: data.body.slice(0, 120) || "(empty draft)",
+          folder: "drafts",
+        });
+      } else {
+        await apiRequest("POST", "/api/emails", {
+          from: user?.displayName || "You",
+          fromEmail: user?.email || "me@aimail.com",
+          to: data.to.split("@")[0] || data.to || "Draft",
+          toEmail: data.to || "",
+          cc: data.cc || "",
+          bcc: data.bcc || "",
+          subject: data.subject || "(no subject)",
+          body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
+          preview: data.body.slice(0, 120) || "(empty draft)",
+          timestamp: now.toISOString(),
+          read: true,
+          starred: false,
+          folder: "drafts",
+          labels: [],
+          attachments: 0,
+        });
+      }
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast({ title: "Draft saved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to save draft", variant: "destructive" });
     },
   });
 
@@ -193,7 +243,7 @@ export default function MailPage() {
         read: { action: "update", updates: { read: true } },
         unread: { action: "update", updates: { read: false } },
         star: { action: "update", updates: { starred: true } },
-        archive: { action: "update", updates: { folder: "all" } },
+        archive: { action: "update", updates: { folder: "archive" } },
       };
       const config = bulkUpdates[action];
       if (config) {
@@ -215,9 +265,16 @@ export default function MailPage() {
   });
 
   const handleSelectEmail = useCallback((email: Email) => {
+    if (folder === "drafts") {
+      setEditingDraft(email);
+      setReplyTo(null);
+      setComposePrefill(null);
+      setComposing(true);
+      return;
+    }
     setSelectedEmail(email);
     if (!email.read) markReadMutation.mutate({ id: email.id, read: true });
-  }, [markReadMutation]);
+  }, [markReadMutation, folder]);
 
   const handleFolderChange = useCallback((newFolder: string) => {
     setFolder(newFolder);
@@ -250,7 +307,26 @@ export default function MailPage() {
     toast({ title: "Refreshed" });
   };
 
+  const handleSaveDraft = useCallback((data: ComposeData & { draftId?: string }) => {
+    saveDraftMutation.mutate(data);
+  }, [saveDraftMutation]);
+
+  const discardDraftMutation = useMutation({
+    mutationFn: async (draftId: string) => {
+      await apiRequest("DELETE", `/api/emails/${draftId}`);
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast({ title: "Draft discarded" });
+    },
+  });
+
+  const handleDiscardDraft = useCallback((draftId: string) => {
+    discardDraftMutation.mutate(draftId);
+  }, [discardDraftMutation]);
+
   const handleSend = (data: ComposeData) => {
+    const currentDraftId = editingDraft?.id;
     setComposing(false);
 
     const { dismiss } = toast({
@@ -276,7 +352,7 @@ export default function MailPage() {
     });
 
     const timer = setTimeout(() => {
-      sendMutation.mutate(data);
+      sendMutation.mutate({ ...data, draftId: currentDraftId });
       setUndoTimer(null);
       closeCompose();
     }, 5000);
@@ -287,6 +363,7 @@ export default function MailPage() {
   const handleCompose = useCallback(() => {
     setReplyTo(null);
     setComposePrefill(null);
+    setEditingDraft(null);
     setComposing(true);
   }, []);
 
@@ -560,9 +637,12 @@ export default function MailPage() {
         isOpen={composing}
         onClose={closeCompose}
         onSend={handleSend}
+        onSaveDraft={handleSaveDraft}
+        onDiscardDraft={handleDiscardDraft}
         isSending={sendMutation.isPending}
         replyTo={replyTo}
         prefill={composePrefill}
+        editDraft={editingDraft}
       />
 
       <AiCommandBar open={commandBarOpen} onOpenChange={setCommandBarOpen} />

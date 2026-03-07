@@ -34,7 +34,9 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 ## Key Features
 
 ### Gmail Core
-- Inbox, Starred, Sent, Drafts, Spam, Trash, All Mail folders
+- Inbox, Starred, Sent, Drafts, Archive, Spam, Trash, All Mail, Pending Approvals folders
+- Draft saving: auto-save on compose close, manual "Save Draft" button, resume/edit drafts from Drafts folder, PATCH existing draft, DELETE draft on send
+- Archive folder: dedicated folder separate from All Mail; archiving moves emails to `folder: "archive"`
 - Email list with unread/read states, star, delete, archive, move-to actions
 - Bulk actions: select all, bulk delete, mark read/unread, star, archive
 - Email detail view with HTML body rendering
@@ -67,7 +69,7 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - `client/src/components/app-sidebar.tsx` - Sidebar with folders, labels, named Active Agents
 - `client/src/components/email-list.tsx` - Email list with AI urgency dots, category badges
 - `client/src/components/email-detail.tsx` - Email detail with AI Insights, Liquid UI cards, enhanced Gatekeeper, tone micro-prompts
-- `client/src/components/compose-dialog.tsx` - Compose/reply dialog with prefill support
+- `client/src/components/compose-dialog.tsx` - Compose/reply dialog with prefill, draft save/resume support
 - `client/src/components/theme-toggle.tsx` - Dark/light mode toggle component
 - `client/src/components/morning-briefing.tsx` - Chief of Staff briefing dashboard with agent stats
 - `client/src/components/ai-command-bar.tsx` - Agent-grouped AI Action Center (Cmd+K)
