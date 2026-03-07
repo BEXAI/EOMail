@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import DOMPurify from "dompurify";
 
 interface EmailListProps {
   emails: Email[];
@@ -44,10 +45,10 @@ interface EmailListProps {
 }
 
 function highlightText(text: string, search: string): string {
-  if (!search) return escapeHtml(text);
+  if (!search) return DOMPurify.sanitize(escapeHtml(text));
   const escaped = escapeHtml(text);
   const regex = new RegExp(`(${search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
-  return escaped.replace(regex, "<mark class='bg-yellow-200 dark:bg-yellow-800 rounded-sm px-0.5'>$1</mark>");
+  return DOMPurify.sanitize(escaped.replace(regex, "<mark class='bg-yellow-200 dark:bg-yellow-800 rounded-sm px-0.5'>$1</mark>"));
 }
 
 function escapeHtml(str: string): string {
