@@ -53,6 +53,7 @@ interface SidebarProps {
   userName?: string;
   userEmail?: string;
   userInitials?: string;
+  mailboxAddress?: string;
 }
 
 const folders = [
@@ -157,7 +158,7 @@ function ActiveAgentsSection() {
   );
 }
 
-export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, activeLabel, onLabelFilter, userName, userEmail, userInitials }: SidebarProps) {
+export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, activeLabel, onLabelFilter, userName, userEmail, userInitials, mailboxAddress }: SidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader className="px-3 pt-4 pb-2">
@@ -259,7 +260,7 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
           </Avatar>
           <div className="flex flex-col min-w-0 flex-1">
             <span className="text-sm font-medium text-sidebar-foreground truncate">{userName || "My Account"}</span>
-            <span className="text-xs text-muted-foreground truncate">{userEmail || "me@eomail.co"}</span>
+            <span className="text-xs text-muted-foreground truncate">{mailboxAddress || userEmail || "me@eomail.co"}</span>
           </div>
           <Settings className="w-4 h-4 text-muted-foreground shrink-0" />
         </div>

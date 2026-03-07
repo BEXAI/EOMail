@@ -9,6 +9,8 @@ interface AuthUser {
   email: string;
   displayName: string;
   avatarInitials: string;
+  mailboxAddress?: string;
+  emailVerified?: boolean;
 }
 
 interface AuthContextValue {

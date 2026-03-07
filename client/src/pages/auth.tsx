@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,6 +109,13 @@ function LoginForm({ loginMutation }: { loginMutation: any }) {
               "Sign In"
             )}
           </Button>
+          <div className="text-center">
+            <Link href="/forgot-password">
+              <span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer" data-testid="link-forgot-password">
+                Forgot your password?
+              </span>
+            </Link>
+          </div>
         </form>
       </CardContent>
     </Card>

@@ -7,6 +7,7 @@ import { insertEmailSchema } from "@shared/schema";
 import { requireAuth } from "./auth";
 import { processEmail, processAllUnprocessed } from "./ai-pipeline";
 import { draftReply, generateBriefing, handleAiCommand } from "./ai";
+import { sendEmail } from "./email";
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -105,6 +106,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const parsed = insertEmailSchema.safeParse(body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+      if (parsed.data.folder === "sent" && parsed.data.toEmail) {
+        if (!(req.user as any).emailVerified) {
+          return res.status(403).json({ error: "Please verify your email before sending messages" });
+        }
+        const senderMailbox = (req.user as any).mailboxAddress || req.user!.email;
+        const result = await sendEmail({
+          from: req.user!.displayName,
+          fromEmail: senderMailbox,
+          to: parsed.data.toEmail,
+          subject: parsed.data.subject,
+          html: parsed.data.body,
+          cc: parsed.data.cc || undefined,
+          bcc: parsed.data.bcc || undefined,
+        });
+        if (!result.success) {
+          console.error("Email delivery failed:", result.error);
+        }
+      }
+
       const email = await storage.createEmail(parsed.data);
       res.status(201).json(email);
     } catch (e) {
@@ -263,6 +284,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!email.aiDraftReply) return res.status(400).json({ error: "No draft reply to approve" });
 
       const now = new Date();
+      const replyBody = `<p>${email.aiDraftReply.replace(/\n/g, "</p><p>")}</p>`;
+      const replySubject = `Re: ${email.subject}`;
+
+      const senderMailbox = (req.user as any).mailboxAddress || req.user!.email;
+      const mailResult = await sendEmail({
+        from: req.user!.displayName,
+        fromEmail: senderMailbox,
+        to: email.fromEmail,
+        subject: replySubject,
+        html: replyBody,
+      });
+      if (!mailResult.success) {
+        console.error("Reply delivery failed:", mailResult.error);
+      }
+
       await storage.createEmail({
         userId,
         from: req.user!.displayName,
@@ -271,8 +307,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         toEmail: email.fromEmail,
         cc: "",
         bcc: "",
-        subject: `Re: ${email.subject}`,
-        body: `<p>${email.aiDraftReply.replace(/\n/g, "</p><p>")}</p>`,
+        subject: replySubject,
+        body: replyBody,
         preview: email.aiDraftReply.slice(0, 120),
         timestamp: now,
         read: true,
@@ -298,6 +334,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: "Failed to reject draft" });
+    }
+  });
+
+  app.post("/api/email/inbound", async (req, res) => {
+    try {
+      const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const providedSecret = req.headers["x-webhook-secret"] || req.query.secret;
+        if (providedSecret !== webhookSecret) {
+          return res.status(401).json({ error: "Unauthorized webhook request" });
+        }
+      }
+
+      const { from, from_email, to, subject, html, text: textBody } = req.body;
+      if (!to || !from_email) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const recipients = Array.isArray(to) ? to : [to];
+      let processed = 0;
+
+      for (const recipient of recipients) {
+        const recipientEmail = typeof recipient === "string" ? recipient : recipient.email;
+        if (!recipientEmail) continue;
+
+        const user = await storage.getUserByMailbox(recipientEmail.toLowerCase());
+        if (!user) continue;
+
+        const senderName = typeof from === "string" ? from : (from?.name || from_email);
+        const body = html || `<p>${(textBody || "").replace(/\n/g, "</p><p>")}</p>`;
+        const preview = (textBody || "").slice(0, 120);
+
+        const email = await storage.createEmail({
+          userId: user.id,
+          from: senderName,
+          fromEmail: from_email,
+          to: user.displayName,
+          toEmail: recipientEmail,
+          cc: "",
+          bcc: "",
+          subject: subject || "(no subject)",
+          body,
+          preview,
+          timestamp: new Date(),
+          read: false,
+          starred: false,
+          folder: "inbox",
+          labels: [],
+          attachments: 0,
+        });
+
+        processEmail(email.id, user.id).catch((e) =>
+          console.error("AI triage failed for inbound email:", e)
+        );
+        processed++;
+      }
+
+      res.json({ success: true, processed });
+    } catch (e) {
+      console.error("Inbound webhook error:", e);
+      res.status(500).json({ error: "Failed to process inbound email" });
     }
   });
 

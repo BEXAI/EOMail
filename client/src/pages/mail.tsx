@@ -498,6 +498,7 @@ export default function MailPage() {
           userName={user?.displayName}
           userEmail={user?.email}
           userInitials={user?.avatarInitials}
+          mailboxAddress={user?.mailboxAddress}
         />
 
         <SidebarInset className="flex flex-col flex-1 min-w-0 overflow-hidden">

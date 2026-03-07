@@ -9,13 +9,22 @@ A full-featured Gmail replica transformed into an AI-powered autonomous email as
 - **Frontend**: React + Vite, TanStack Query, Wouter routing, Tailwind CSS, Shadcn UI
 - **Backend**: Express.js with PostgreSQL database (Drizzle ORM)
 - **Auth**: Passport.js local strategy, express-session with connect-pg-simple, bcrypt password hashing
-- **AI**: OpenAI integration via Replit AI Integrations blueprint (gpt-5-mini)
+- **AI**: OpenAI gpt-4o-mini via OPENAI_API_KEY (user's own key)
+- **Email**: Resend SDK for outbound email delivery and inbound webhook processing
 - **Shared**: Drizzle schema types in `shared/schema.ts`
+
+## Environment Variables
+
+- `DATABASE_URL` — PostgreSQL connection string (Replit built-in)
+- `SESSION_SECRET` — Required. App refuses to start without it
+- `OPENAI_API_KEY` — OpenAI API key for AI features
+- `RESEND_API_KEY` — Resend API key for email sending
+- `DOMAIN` — Email domain (default: eomail.co)
 
 ## Database
 
 - **PostgreSQL** via Replit's built-in database (DATABASE_URL)
-- **Tables**: `users` (UUID PK), `emails` (UUID PK, FK to users, AI fields), `agent_activity` (UUID PK, agent names), `session` (connect-pg-simple)
+- **Tables**: `users` (UUID PK, mailboxAddress, emailVerified, verificationToken, resetToken, resetTokenExpiry), `emails` (UUID PK, FK to users, AI fields), `agent_activity` (UUID PK, agent names), `session` (connect-pg-simple)
 - **ORM**: Drizzle ORM with `drizzle-kit push` for schema sync
 - **Indexes**: emails.userId, emails.folder, emails.(userId+folder), emails.timestamp
 
@@ -39,7 +48,7 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - Archive folder: dedicated folder separate from All Mail; archiving moves emails to `folder: "archive"`
 - Email list with unread/read states, star, delete, archive, move-to actions
 - Bulk actions: select all, bulk delete, mark read/unread, star, archive
-- Email detail view with HTML body rendering
+- Email detail view with HTML body rendering (DOMPurify XSS protection)
 - Compose dialog with To, CC, BCC, Subject, Body, prefill support
 - Reply functionality with pre-filled fields
 - Undo Send — 5 second delay with undo toast button
@@ -61,37 +70,52 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - **Pending Approvals Workflow**: Virtual folder, AI draft replies with Approve & Send / Edit / Reject
 - **Active Agents Sidebar**: Named agents with distinct icons/colors, real-time status, auto-refresh
 
+### Email Infrastructure
+- **Outbound**: Resend SDK sends real emails when composing (folder=sent) or approving AI drafts
+- **Inbound**: POST /api/email/inbound webhook receives emails from Resend, maps to user by mailbox address, inserts into inbox, triggers AI triage
+- **Mailbox Provisioning**: Each user gets username@eomail.co address on registration
+- **Password Reset**: Forgot password flow via email with time-limited token (1 hour)
+- **Email Verification**: Verification email on registration with token-based confirmation
+
 ## File Structure
 
-- `client/src/pages/auth.tsx` - Login/signup with EOMail branding and tagline
+- `client/src/pages/auth.tsx` - Login/signup with EOMail branding, forgot password link
+- `client/src/pages/forgot-password.tsx` - Forgot password form (sends reset email)
+- `client/src/pages/reset-password.tsx` - Reset password form (validates token)
+- `client/src/pages/verify-email.tsx` - Email verification page (auto-verifies on load)
 - `client/src/pages/mail.tsx` - Main mail page with all state management
-- `client/src/hooks/use-auth.tsx` - Auth context provider
-- `client/src/components/app-sidebar.tsx` - Sidebar with folders, labels, named Active Agents
+- `client/src/hooks/use-auth.tsx` - Auth context provider (includes mailboxAddress, emailVerified)
+- `client/src/components/app-sidebar.tsx` - Sidebar with folders, labels, named Active Agents, mailbox address display
 - `client/src/components/email-list.tsx` - Email list with AI urgency dots, category badges
-- `client/src/components/email-detail.tsx` - Email detail with AI Insights, Liquid UI cards, enhanced Gatekeeper, tone micro-prompts
+- `client/src/components/email-detail.tsx` - Email detail with AI Insights, Liquid UI cards, enhanced Gatekeeper, tone micro-prompts, DOMPurify sanitization
 - `client/src/components/compose-dialog.tsx` - Compose/reply dialog with prefill, draft save/resume support
 - `client/src/components/theme-toggle.tsx` - Dark/light mode toggle component
 - `client/src/components/morning-briefing.tsx` - Chief of Staff briefing dashboard with agent stats
 - `client/src/components/ai-command-bar.tsx` - Agent-grouped AI Action Center (Cmd+K)
 - `server/ai.ts` - AI service functions with tone support and enhanced spam analysis
 - `server/ai-pipeline.ts` - AI processing pipeline with named agent assignments
-- `server/routes.ts` - API routes including AI endpoints with tone and agent stats
-- `server/storage.ts` - DatabaseStorage with enriched seed emails
-- `shared/schema.ts` - Drizzle schema with AI fields and agentName column
+- `server/email.ts` - Resend SDK email service (send, password reset, verification emails)
+- `server/routes.ts` - API routes including AI endpoints, inbound webhook
+- `server/storage.ts` - DatabaseStorage with user lookup methods (by email, reset token, verification token, mailbox)
+- `shared/schema.ts` - Drizzle schema with AI fields, agentName column, user auth fields
 
 ## API Routes
 
 ### Auth
-- `POST /api/auth/register` — Create user, seed emails, auto-login
+- `POST /api/auth/register` — Create user with mailbox address, send verification email, auto-login
 - `POST /api/auth/login` — Authenticate
 - `POST /api/auth/logout` — Destroy session
 - `GET /api/auth/user` — Current user or 401
+- `POST /api/auth/forgot-password` — Send password reset email
+- `POST /api/auth/reset-password` — Validate token and set new password
+- `POST /api/auth/verify-email` — Verify email with token
+- `POST /api/auth/resend-verification` — Resend verification email
 
 ### Emails
 - `GET /api/emails?folder=inbox&search=query&label=work` — List emails
 - `GET /api/emails/counts` — Folder counts
 - `GET /api/emails/:id` — Single email
-- `POST /api/emails` — Create email
+- `POST /api/emails` — Create email (sends via Resend when folder=sent)
 - `PATCH /api/emails/:id` — Update email
 - `POST /api/emails/bulk` — Bulk operations
 - `DELETE /api/emails/:id` — Delete email
@@ -103,15 +127,21 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - `GET /api/ai/briefing` — Morning briefing with agent stats
 - `GET /api/ai/activity` — Agent activity log (includes agent names)
 - `POST /api/ai/command` — Natural language command
-- `POST /api/ai/approve/:id` — Approve and send AI draft
+- `POST /api/ai/approve/:id` — Approve and send AI draft (sends via Resend)
 - `POST /api/ai/reject/:id` — Reject AI draft
+
+### Inbound
+- `POST /api/email/inbound` — Webhook for incoming emails (no auth, maps to user by mailbox)
 
 ## Security & Production Hardening
 
-- **Helmet**: Security headers (CSP, X-Frame-Options, X-Content-Type-Options, etc.) via `helmet` middleware in `server/index.ts`
-- **Rate Limiting**: `express-rate-limit` — auth endpoints: 10 req/15min per IP; all API routes: 100 req/min per IP
-- **Input Validation**: Zod schemas for PATCH email updates (strict mode, only known fields), bulk actions (ids array max 500, action enum), AI command prompt (max 500 chars)
+- **Helmet**: Security headers (CSP, X-Frame-Options, X-Content-Type-Options, etc.) via `helmet` middleware
+- **Rate Limiting**: `express-rate-limit` — auth: 10 req/15min, API: 100 req/min, AI: 50 req/hr per IP
+- **Input Validation**: Zod schemas for PATCH email updates (strict mode), bulk actions (max 500 ids), AI command prompt (max 500 chars)
+- **XSS Protection**: DOMPurify sanitization on all rendered email HTML bodies
+- **Session Security**: SESSION_SECRET required at startup (no fallback)
 - **Error Handling**: All frontend mutations have `onError` callbacks with user-facing toast notifications
+- **Token Security**: Password reset tokens expire after 1 hour; verification/reset tokens stripped from API responses
 - **Deployment**: Autoscale target, `npm run build` → `node dist/index.cjs`
 
 ## UX Polish
