@@ -15,6 +15,8 @@ import {
   Inbox,
   AlertTriangle,
   Sparkles,
+  Search,
+  Tag,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -23,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface EmailListProps {
   emails: Email[];
@@ -43,7 +46,7 @@ interface EmailListProps {
 function highlightText(text: string, search: string): string {
   if (!search) return text;
   const regex = new RegExp(`(${search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
-  return text.replace(regex, "<mark class='bg-yellow-200 dark:bg-yellow-800 rounded-sm'>$1</mark>");
+  return text.replace(regex, "<mark class='bg-yellow-200 dark:bg-yellow-800 rounded-sm px-0.5'>$1</mark>");
 }
 
 const urgencyDotColors: Record<string, string> = {
@@ -78,6 +81,7 @@ export function EmailList({
 }: EmailListProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const isMobile = useIsMobile();
 
   const toggleCheck = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -108,7 +112,7 @@ export function EmailList({
 
   if (isLoading) {
     return (
-      <div className="flex flex-col">
+      <div className="flex flex-col animate-in fade-in duration-200">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-border">
             <Skeleton className="w-5 h-5 rounded-sm shrink-0" />
@@ -129,17 +133,23 @@ export function EmailList({
 
   if (emails.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full py-24 text-center px-8">
-        <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center mb-6">
-          <Archive className="w-10 h-10 text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center h-full py-24 text-center px-8 animate-in fade-in duration-300">
+        <div className="w-20 h-20 rounded-2xl bg-muted/80 flex items-center justify-center mb-5">
+          {search ? (
+            <Search className="w-8 h-8 text-muted-foreground/60" />
+          ) : labelFilter ? (
+            <Tag className="w-8 h-8 text-muted-foreground/60" />
+          ) : (
+            <Archive className="w-8 h-8 text-muted-foreground/60" />
+          )}
         </div>
-        <h3 className="text-lg font-semibold text-foreground mb-2">
+        <h3 className="text-base font-semibold text-foreground mb-1.5">
           {search ? "No results found" : labelFilter ? "No emails with this label" : "Nothing here"}
         </h3>
-        <p className="text-sm text-muted-foreground max-w-xs">
+        <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
           {search
-            ? `No emails match "${search}". Try a different search term.`
-            : `Your ${folder} is empty.`}
+            ? `No emails match "${search}". Try different keywords.`
+            : `Your ${folder} is empty. Emails that arrive here will show up.`}
         </p>
       </div>
     );
@@ -147,47 +157,44 @@ export function EmailList({
 
   return (
     <div className="flex flex-col h-full">
-      {hasChecked && (
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/50 shrink-0" data-testid="bulk-actions-bar">
-          <Checkbox
-            checked={allChecked}
-            onCheckedChange={toggleSelectAll}
-            className="w-4 h-4"
-            data-testid="checkbox-select-all"
-          />
-          <span className="text-xs text-muted-foreground mr-2">
-            {checkedIds.size} selected
-          </span>
-          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("delete")} data-testid="bulk-delete">
-            <Trash2 className="w-3.5 h-3.5" /> Delete
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("read")} data-testid="bulk-mark-read">
-            <MailOpen className="w-3.5 h-3.5" /> Read
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("unread")} data-testid="bulk-mark-unread">
-            <Mail className="w-3.5 h-3.5" /> Unread
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("star")} data-testid="bulk-star">
-            <Star className="w-3.5 h-3.5" /> Star
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("archive")} data-testid="bulk-archive">
-            <Archive className="w-3.5 h-3.5" /> Archive
-          </Button>
-        </div>
-      )}
+      <div
+        className={cn(
+          "flex items-center gap-2 px-4 py-1.5 border-b border-border shrink-0 transition-all duration-200",
+          hasChecked ? "bg-primary/5" : "bg-transparent"
+        )}
+        data-testid="bulk-actions-bar"
+      >
+        <Checkbox
+          checked={hasChecked ? allChecked : false}
+          onCheckedChange={toggleSelectAll}
+          className="w-4 h-4"
+          data-testid="checkbox-select-all"
+        />
+        {hasChecked && (
+          <div className="flex items-center gap-1 animate-in slide-in-from-left-2 duration-150">
+            <span className="text-xs text-muted-foreground mr-1">
+              {checkedIds.size} selected
+            </span>
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("delete")} data-testid="bulk-delete">
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("read")} data-testid="bulk-mark-read">
+              <MailOpen className="w-3.5 h-3.5" /> Read
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 hidden sm:flex" onClick={() => handleBulkAction("unread")} data-testid="bulk-mark-unread">
+              <Mail className="w-3.5 h-3.5" /> Unread
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("star")} data-testid="bulk-star">
+              <Star className="w-3.5 h-3.5" /> Star
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 hidden sm:flex" onClick={() => handleBulkAction("archive")} data-testid="bulk-archive">
+              <Archive className="w-3.5 h-3.5" /> Archive
+            </Button>
+          </div>
+        )}
+      </div>
 
-      {!hasChecked && (
-        <div className="flex items-center px-4 py-1.5 border-b border-border shrink-0">
-          <Checkbox
-            checked={false}
-            onCheckedChange={toggleSelectAll}
-            className="w-4 h-4"
-            data-testid="checkbox-select-all"
-          />
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
         {emails.map((email) => {
           const isSelected = selectedId === email.id;
           const isHovered = hoveredId === email.id;
@@ -195,30 +202,36 @@ export function EmailList({
           const initials = getInitials(email.from);
           const avatarColor = getSenderColor(email.from);
           const previewText = email.aiSummary || email.preview;
+          const showControls = isMobile || isChecked || isHovered;
 
           return (
             <div
               key={email.id}
+              role="option"
+              aria-selected={isSelected}
+              tabIndex={0}
               onClick={() => onSelect(email)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(email); } }}
               onMouseEnter={() => setHoveredId(email.id)}
               onMouseLeave={() => setHoveredId(null)}
               data-testid={`email-item-${email.id}`}
               className={cn(
-                "flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-border transition-colors relative group",
+                "flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-border transition-all duration-150 relative group outline-none",
+                "focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset",
                 isSelected
                   ? "bg-primary/8 border-l-[3px] border-l-primary"
                   : !email.read
-                  ? "bg-background"
-                  : "bg-muted/30",
-                isHovered && !isSelected && "bg-muted/50"
+                  ? "bg-background hover:bg-muted/40"
+                  : "bg-muted/20 hover:bg-muted/50",
+                isSelected && "pl-[13px]"
               )}
             >
               <div className="flex items-center gap-2 mt-1 shrink-0">
                 <div
                   onClick={(e) => toggleCheck(email.id, e)}
                   className={cn(
-                    "w-5 h-5 transition-opacity",
-                    isChecked || isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    "w-5 h-5 transition-opacity duration-100",
+                    showControls ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   )}
                 >
                   <Checkbox
@@ -230,9 +243,11 @@ export function EmailList({
                 <button
                   onClick={(e) => { e.stopPropagation(); onStar(email.id, !email.starred); }}
                   className={cn(
-                    "shrink-0 transition-all",
-                    email.starred ? "text-amber-400" : "text-muted-foreground opacity-0 group-hover:opacity-100"
+                    "shrink-0 transition-all duration-100 active:scale-110",
+                    email.starred ? "text-amber-400" : "text-muted-foreground/40",
+                    !email.starred && !showControls && "opacity-0 group-hover:opacity-100"
                   )}
+                  aria-label={email.starred ? "Remove star" : "Add star"}
                   data-testid={`star-email-${email.id}`}
                 >
                   <Star className={cn("w-4 h-4", email.starred && "fill-amber-400")} />
@@ -252,8 +267,9 @@ export function EmailList({
 
               <div
                 className={cn(
-                  "w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold mt-0.5",
-                  avatarColor
+                  "w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold mt-0.5 transition-transform duration-100",
+                  avatarColor,
+                  isSelected && "scale-95"
                 )}
               >
                 {initials}
@@ -270,35 +286,35 @@ export function EmailList({
                     dangerouslySetInnerHTML={{ __html: highlightText(email.from, search) }}
                   />
                   <div className="flex items-center gap-1 shrink-0">
-                    {isHovered && (
-                      <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                    {isHovered && !isMobile && (
+                      <div className="flex items-center gap-0.5 animate-in fade-in slide-in-from-right-2 duration-150" onClick={(e) => e.stopPropagation()}>
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-6 w-6"
+                          className="h-6 w-6 active:scale-95"
                           onClick={() => onArchive(email.id)}
                           data-testid={`archive-email-${email.id}`}
-                          title="Archive"
+                          aria-label="Archive"
                         >
                           <Archive className="w-3.5 h-3.5" />
                         </Button>
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-6 w-6"
+                          className="h-6 w-6 active:scale-95"
                           onClick={() => onDelete(email.id)}
                           data-testid={`delete-email-${email.id}`}
-                          title="Delete"
+                          aria-label="Delete"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-6 w-6"
+                          className="h-6 w-6 active:scale-95"
                           onClick={() => onMarkRead(email.id, !email.read)}
                           data-testid={`toggle-read-${email.id}`}
-                          title={email.read ? "Mark unread" : "Mark read"}
+                          aria-label={email.read ? "Mark unread" : "Mark read"}
                         >
                           {email.read ? <Mail className="w-3.5 h-3.5" /> : <MailOpen className="w-3.5 h-3.5" />}
                         </Button>
@@ -307,9 +323,9 @@ export function EmailList({
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-6 w-6"
+                              className="h-6 w-6 active:scale-95"
                               data-testid={`move-email-${email.id}`}
-                              title="Move to"
+                              aria-label="Move to folder"
                             >
                               <FolderInput className="w-3.5 h-3.5" />
                             </Button>

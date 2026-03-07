@@ -79,7 +79,7 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
   const agentStats = briefingData?.agentStats || [];
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto" data-testid="morning-briefing">
+    <div className="flex flex-col h-full overflow-y-auto scrollbar-thin" data-testid="morning-briefing">
       <div className="max-w-2xl mx-auto w-full px-6 py-8 space-y-6">
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mx-auto mb-4 border border-primary/10">
@@ -207,8 +207,11 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
               {urgentEmails.map((email) => (
                 <Card
                   key={email.id}
-                  className="border-border cursor-pointer hover:bg-muted/50 transition-colors"
+                  role="button"
+                  tabIndex={0}
+                  className="border-border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:ring-2 focus-visible:ring-primary/30 outline-none"
                   onClick={() => onSelectEmail(email)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectEmail(email); } }}
                   data-testid={`urgent-email-${email.id}`}
                 >
                   <CardContent className="p-3 flex items-center gap-3">

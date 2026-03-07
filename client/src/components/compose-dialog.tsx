@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   X,
@@ -47,6 +46,8 @@ export function ComposeDialog({ isOpen, onClose, onSend, isSending, replyTo, pre
   const [body, setBody] = useState("");
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
+  const toInputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -69,8 +70,30 @@ export function ComposeDialog({ isOpen, onClose, onSend, isSending, replyTo, pre
       setShowBcc(false);
       setMinimized(false);
       setMaximized(false);
+
+      requestAnimationFrame(() => {
+        if (replyTo) {
+          bodyRef.current?.focus();
+        } else if (prefill) {
+          bodyRef.current?.focus();
+        } else {
+          toInputRef.current?.focus();
+        }
+      });
     }
   }, [isOpen, replyTo, prefill]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   const handleSend = () => {
     if (!to) return;
@@ -80,181 +103,206 @@ export function ComposeDialog({ isOpen, onClose, onSend, isSending, replyTo, pre
   if (!isOpen) return null;
 
   return (
-    <div
-      className={cn(
-        "fixed z-50 bg-card border border-card-border shadow-2xl flex flex-col transition-all duration-200",
-        maximized
-          ? "inset-4 rounded-lg"
-          : minimized
-          ? "bottom-0 right-6 w-80 h-12 rounded-t-lg overflow-hidden"
-          : "bottom-0 right-4 md:right-6 w-[calc(100vw-2rem)] md:w-[520px] h-[500px] rounded-t-lg"
-      )}
-    >
-      <div
-        className="flex items-center justify-between px-4 py-3 bg-muted/50 rounded-t-lg cursor-pointer shrink-0"
-        onClick={() => minimized && setMinimized(false)}
-      >
-        <span className="font-semibold text-sm text-foreground">
-          {replyTo ? `Reply to: ${replyTo.from}` : "New Message"}
-        </span>
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6"
-            onClick={() => setMinimized(!minimized)}
-            data-testid="button-minimize-compose"
-          >
-            <Minimize2 className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6"
-            onClick={() => setMaximized(!maximized)}
-            data-testid="button-maximize-compose"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6"
-            onClick={onClose}
-            data-testid="button-close-compose"
-          >
-            <X className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </div>
-
+    <>
       {!minimized && (
-        <>
-          <div className="flex flex-col border-b border-border shrink-0">
-            <div className="flex items-center px-4 py-2 border-b border-border gap-2">
-              <span className="text-xs text-muted-foreground w-12 shrink-0">To</span>
-              <Input
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                placeholder="Recipients"
-                className="border-0 shadow-none focus-visible:ring-0 text-sm h-7 px-0"
-                data-testid="input-compose-to"
-              />
-              <div className="flex items-center gap-1 shrink-0">
-                {!showCc && (
-                  <button
-                    className="text-xs text-primary font-medium"
-                    onClick={() => setShowCc(true)}
-                    data-testid="button-show-cc"
-                  >
-                    Cc
-                  </button>
-                )}
-                {!showBcc && (
-                  <button
-                    className="text-xs text-primary font-medium ml-2"
-                    onClick={() => setShowBcc(true)}
-                    data-testid="button-show-bcc"
-                  >
-                    Bcc
-                  </button>
-                )}
-              </div>
-            </div>
-            {showCc && (
-              <div className="flex items-center px-4 py-2 border-b border-border gap-2">
-                <span className="text-xs text-muted-foreground w-12 shrink-0">Cc</span>
-                <Input
-                  value={cc}
-                  onChange={(e) => setCc(e.target.value)}
-                  placeholder="CC recipients"
-                  className="border-0 shadow-none focus-visible:ring-0 text-sm h-7 px-0"
-                  data-testid="input-compose-cc"
-                />
-              </div>
-            )}
-            {showBcc && (
-              <div className="flex items-center px-4 py-2 border-b border-border gap-2">
-                <span className="text-xs text-muted-foreground w-12 shrink-0">Bcc</span>
-                <Input
-                  value={bcc}
-                  onChange={(e) => setBcc(e.target.value)}
-                  placeholder="BCC recipients"
-                  className="border-0 shadow-none focus-visible:ring-0 text-sm h-7 px-0"
-                  data-testid="input-compose-bcc"
-                />
-              </div>
-            )}
-            <div className="flex items-center px-4 py-2 border-b border-border gap-2">
-              <span className="text-xs text-muted-foreground w-12 shrink-0">Subject</span>
-              <Input
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="Subject"
-                className="border-0 shadow-none focus-visible:ring-0 text-sm h-7 px-0"
-                data-testid="input-compose-subject"
-              />
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-            <Textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="Write your message..."
-              className="flex-1 border-0 shadow-none focus-visible:ring-0 resize-none text-sm rounded-none min-h-0"
-              data-testid="textarea-compose-body"
-            />
-          </div>
-
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border shrink-0">
-            <div className="flex items-center gap-1">
-              <Button
-                onClick={handleSend}
-                disabled={isSending || !to}
-                className="gap-2 rounded-full"
-                size="sm"
-                data-testid="button-send-email"
-              >
-                <Send className="w-3.5 h-3.5" />
-                {isSending ? "Sending..." : "Send"}
-              </Button>
-              <div className="hidden md:flex items-center ml-1">
-                <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-compose-bold">
-                  <Bold className="w-4 h-4 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-compose-italic">
-                  <Italic className="w-4 h-4 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-compose-underline">
-                  <Underline className="w-4 h-4 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-compose-link">
-                  <Link className="w-4 h-4 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-compose-list">
-                  <List className="w-4 h-4 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-compose-attach">
-                  <Paperclip className="w-4 h-4 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-compose-emoji">
-                  <Smile className="w-4 h-4 text-muted-foreground" />
-                </Button>
-              </div>
-            </div>
+        <div
+          className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px] md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={replyTo ? `Reply to ${replyTo.from}` : "New message"}
+        className={cn(
+          "fixed z-50 bg-card border border-card-border shadow-2xl flex flex-col transition-all duration-200",
+          "animate-in slide-in-from-bottom-4 fade-in duration-200",
+          maximized
+            ? "inset-4 rounded-lg"
+            : minimized
+            ? "bottom-0 right-6 w-80 h-12 rounded-t-lg overflow-hidden"
+            : "bottom-0 right-4 md:right-6 w-[calc(100vw-2rem)] md:w-[520px] h-[500px] rounded-t-lg"
+        )}
+      >
+        <div
+          className="flex items-center justify-between px-4 py-3 bg-muted/50 rounded-t-lg cursor-pointer shrink-0"
+          onClick={() => minimized && setMinimized(false)}
+        >
+          <span className="font-semibold text-sm text-foreground truncate mr-2">
+            {replyTo ? `Reply to: ${replyTo.from}` : "New Message"}
+          </span>
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <Button
               size="icon"
               variant="ghost"
-              className="h-8 w-8"
-              onClick={onClose}
-              data-testid="button-compose-discard"
+              className="h-6 w-6"
+              onClick={() => setMinimized(!minimized)}
+              aria-label={minimized ? "Expand" : "Minimize"}
+              data-testid="button-minimize-compose"
             >
-              <Trash2 className="w-4 h-4 text-muted-foreground" />
+              <Minimize2 className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={() => setMaximized(!maximized)}
+              aria-label={maximized ? "Restore" : "Maximize"}
+              data-testid="button-maximize-compose"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={onClose}
+              aria-label="Close"
+              data-testid="button-close-compose"
+            >
+              <X className="w-3.5 h-3.5" />
             </Button>
           </div>
-        </>
-      )}
-    </div>
+        </div>
+
+        {!minimized && (
+          <>
+            <div className="flex flex-col border-b border-border shrink-0">
+              <div className="flex items-center px-4 py-2 border-b border-border gap-2">
+                <label htmlFor="compose-to" className="text-xs text-muted-foreground w-12 shrink-0">To</label>
+                <Input
+                  ref={toInputRef}
+                  id="compose-to"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                  placeholder="Recipients"
+                  className="border-0 shadow-none focus-visible:ring-0 text-sm h-7 px-0"
+                  data-testid="input-compose-to"
+                />
+                <div className="flex items-center gap-1 shrink-0">
+                  {!showCc && (
+                    <button
+                      className="text-xs text-primary font-medium hover:underline"
+                      onClick={() => setShowCc(true)}
+                      data-testid="button-show-cc"
+                    >
+                      Cc
+                    </button>
+                  )}
+                  {!showBcc && (
+                    <button
+                      className="text-xs text-primary font-medium ml-2 hover:underline"
+                      onClick={() => setShowBcc(true)}
+                      data-testid="button-show-bcc"
+                    >
+                      Bcc
+                    </button>
+                  )}
+                </div>
+              </div>
+              {showCc && (
+                <div className="flex items-center px-4 py-2 border-b border-border gap-2 animate-in slide-in-from-top-1 duration-150">
+                  <label htmlFor="compose-cc" className="text-xs text-muted-foreground w-12 shrink-0">Cc</label>
+                  <Input
+                    id="compose-cc"
+                    value={cc}
+                    onChange={(e) => setCc(e.target.value)}
+                    placeholder="CC recipients"
+                    className="border-0 shadow-none focus-visible:ring-0 text-sm h-7 px-0"
+                    autoFocus
+                    data-testid="input-compose-cc"
+                  />
+                </div>
+              )}
+              {showBcc && (
+                <div className="flex items-center px-4 py-2 border-b border-border gap-2 animate-in slide-in-from-top-1 duration-150">
+                  <label htmlFor="compose-bcc" className="text-xs text-muted-foreground w-12 shrink-0">Bcc</label>
+                  <Input
+                    id="compose-bcc"
+                    value={bcc}
+                    onChange={(e) => setBcc(e.target.value)}
+                    placeholder="BCC recipients"
+                    className="border-0 shadow-none focus-visible:ring-0 text-sm h-7 px-0"
+                    autoFocus
+                    data-testid="input-compose-bcc"
+                  />
+                </div>
+              )}
+              <div className="flex items-center px-4 py-2 border-b border-border gap-2">
+                <label htmlFor="compose-subject" className="text-xs text-muted-foreground w-12 shrink-0">Subject</label>
+                <Input
+                  id="compose-subject"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Subject"
+                  className="border-0 shadow-none focus-visible:ring-0 text-sm h-7 px-0"
+                  data-testid="input-compose-subject"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+              <Textarea
+                ref={bodyRef}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="Write your message..."
+                className="flex-1 border-0 shadow-none focus-visible:ring-0 resize-none text-sm rounded-none min-h-0"
+                data-testid="textarea-compose-body"
+              />
+            </div>
+
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border shrink-0">
+              <div className="flex items-center gap-1">
+                <Button
+                  onClick={handleSend}
+                  disabled={isSending || !to}
+                  className="gap-2 rounded-full active:scale-95 transition-transform"
+                  size="sm"
+                  data-testid="button-send-email"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {isSending ? "Sending..." : "Send"}
+                </Button>
+                <div className="hidden md:flex items-center ml-1">
+                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Bold" data-testid="button-compose-bold">
+                    <Bold className="w-4 h-4 text-muted-foreground" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Italic" data-testid="button-compose-italic">
+                    <Italic className="w-4 h-4 text-muted-foreground" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Underline" data-testid="button-compose-underline">
+                    <Underline className="w-4 h-4 text-muted-foreground" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Insert link" data-testid="button-compose-link">
+                    <Link className="w-4 h-4 text-muted-foreground" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="List" data-testid="button-compose-list">
+                    <List className="w-4 h-4 text-muted-foreground" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Attach file" data-testid="button-compose-attach">
+                    <Paperclip className="w-4 h-4 text-muted-foreground" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Insert emoji" data-testid="button-compose-emoji">
+                    <Smile className="w-4 h-4 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={onClose}
+                aria-label="Discard draft"
+                data-testid="button-compose-discard"
+              >
+                <Trash2 className="w-4 h-4 text-muted-foreground" />
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </>
   );
 }

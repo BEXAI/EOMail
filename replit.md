@@ -103,3 +103,13 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - `POST /api/ai/command` — Natural language command
 - `POST /api/ai/approve/:id` — Approve and send AI draft
 - `POST /api/ai/reject/:id` — Reject AI draft
+
+## UX Polish
+
+- **Accessibility**: Email list items have `role="option"`, `tabIndex={0}`, focus-visible rings; compose dialog has `role="dialog"`, `aria-modal="true"`, `aria-label` on icon buttons; morning briefing urgent cards are keyboard navigable
+- **Mobile**: Email list checkboxes/stars always visible on mobile via `useIsMobile()` hook; compose dialog shows mobile backdrop overlay; hover-only quick actions hidden on touch devices
+- **Animations**: Bulk actions bar slides in; compose dialog slides up; CC/BCC fields animate in; quick action buttons fade in from right
+- **Focus management**: Auto-focus on login/register first inputs; compose dialog focuses To field (or body for replies); global `focus-visible` ring style
+- **Scrollbars**: Thin, subtle custom scrollbars on email list, email detail, and morning briefing
+- **Layout**: Liquid UI cards appear above email body (not below) for better visibility
+- **Interactions**: Star/archive/delete buttons have `active:scale-95` press feedback

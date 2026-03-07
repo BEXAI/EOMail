@@ -476,7 +476,7 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
         <div className="px-4 md:px-6 pt-6 pb-4">
           {showSpamWarning && (
             <Card className="mb-4 border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950/50 shadow-sm" data-testid="gatekeeper-warning">
@@ -642,6 +642,8 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
             </div>
           </div>
 
+          <LiquidUICard email={email} onArchive={onArchive} />
+
           <Separator className="mb-6" />
 
           <div
@@ -677,8 +679,6 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
               </div>
             </div>
           )}
-
-          <LiquidUICard email={email} onArchive={onArchive} />
 
           {email.aiDraftReply && (
             <Card className="mt-6 border-primary/30 bg-primary/5" data-testid="pending-approval-card">

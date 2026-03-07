@@ -79,6 +79,7 @@ function LoginForm({ loginMutation }: { loginMutation: any }) {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter your username"
               required
+              autoFocus
               data-testid="input-login-username"
             />
           </div>
@@ -155,6 +156,7 @@ function RegisterForm({ registerMutation }: { registerMutation: any }) {
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="e.g. John Doe"
               required
+              autoFocus
               data-testid="input-register-displayname"
             />
           </div>
