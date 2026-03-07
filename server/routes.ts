@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { type Server } from "http";
+import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { storage } from "./storage";
@@ -570,8 +571,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
       if (webhookSecret) {
-        const providedSecret = req.headers["x-webhook-secret"] || req.query.secret;
-        if (providedSecret !== webhookSecret) {
+        const providedSecret = String(req.headers["x-webhook-secret"] || req.query.secret || "");
+        if (
+          providedSecret.length !== webhookSecret.length ||
+          !crypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(webhookSecret))
+        ) {
           return res.status(401).json({ error: "Unauthorized webhook request" });
         }
       }

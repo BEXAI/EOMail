@@ -25,6 +25,35 @@ declare global {
   }
 }
 
+const LOGIN_ATTEMPT_WINDOW = 15 * 60 * 1000; // 15 minutes
+const MAX_LOGIN_ATTEMPTS = 5;
+const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
+
+function recordFailedLogin(username: string): boolean {
+  const now = Date.now();
+  const record = loginAttempts.get(username);
+  if (!record || now - record.firstAttempt > LOGIN_ATTEMPT_WINDOW) {
+    loginAttempts.set(username, { count: 1, firstAttempt: now });
+    return false;
+  }
+  record.count++;
+  return record.count >= MAX_LOGIN_ATTEMPTS;
+}
+
+function isLockedOut(username: string): boolean {
+  const record = loginAttempts.get(username);
+  if (!record) return false;
+  if (Date.now() - record.firstAttempt > LOGIN_ATTEMPT_WINDOW) {
+    loginAttempts.delete(username);
+    return false;
+  }
+  return record.count >= MAX_LOGIN_ATTEMPTS;
+}
+
+function clearLoginAttempts(username: string): void {
+  loginAttempts.delete(username);
+}
+
 export function setupAuth(app: Express) {
   if (!process.env.SESSION_SECRET) {
     throw new Error("SESSION_SECRET environment variable is required");
@@ -57,14 +86,20 @@ export function setupAuth(app: Express) {
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
+        if (isLockedOut(username)) {
+          return done(null, false, { message: "Account temporarily locked due to too many failed attempts. Try again later." });
+        }
         const user = await storage.getUserByUsername(username);
         if (!user) {
+          recordFailedLogin(username);
           return done(null, false, { message: "Invalid username or password" });
         }
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
+          recordFailedLogin(username);
           return done(null, false, { message: "Invalid username or password" });
         }
+        clearLoginAttempts(username);
         const { password: _, verificationToken: _vt, resetToken: _rt, resetTokenExpiry: _rte, ...safeUser } = user;
         return done(null, safeUser as Express.User);
       } catch (err) {
@@ -98,13 +133,13 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
-      if (password.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      if (password.length < 12) {
+        return res.status(400).json({ message: "Password must be at least 12 characters" });
       }
 
       const existing = await storage.getUserByUsername(username);
       if (existing) {
-        return res.status(400).json({ message: "Username already taken" });
+        return res.status(400).json({ message: "An account with this username or email already exists" });
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
