@@ -23,9 +23,9 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: DOMAIN
-        value: eomail.email.co
+        value: eomail.co
       - key: NEXT_PUBLIC_APP_URL
-        value: https://eomail.email.co
+        value: https://eomail.co
       - key: OPENAI_API_KEY
         sync: false
       - key: RESEND_API_KEY
