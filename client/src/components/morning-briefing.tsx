@@ -34,7 +34,7 @@ const agentIcons: Record<string, { icon: typeof DollarSign; color: string; bgCol
   "FinOps Auto-Resolver": { icon: DollarSign, color: "text-emerald-600 dark:text-emerald-400", bgColor: "bg-emerald-100 dark:bg-emerald-900" },
   "Chrono-Logistics Coordinator": { icon: Calendar, color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-900" },
   "Aegis Gatekeeper": { icon: Shield, color: "text-red-600 dark:text-red-400", bgColor: "bg-red-100 dark:bg-red-900" },
-  "AIMAIL Assistant": { icon: Sparkles, color: "text-purple-600 dark:text-purple-400", bgColor: "bg-purple-100 dark:bg-purple-900" },
+  "EOMail Assistant": { icon: Sparkles, color: "text-purple-600 dark:text-purple-400", bgColor: "bg-purple-100 dark:bg-purple-900" },
 };
 
 export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBriefingProps) {
@@ -153,7 +153,7 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
             </h3>
             <div className="grid grid-cols-2 gap-2">
               {agentStats.filter(a => a.completed > 0 || a.pending > 0).map((agent) => {
-                const config = agentIcons[agent.name] || agentIcons["AIMAIL Assistant"];
+                const config = agentIcons[agent.name] || agentIcons["EOMail Assistant"];
                 const AgentIcon = config.icon;
                 return (
                   <Card key={agent.name} className="border-border">

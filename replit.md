@@ -1,4 +1,4 @@
-# AIMAIL.com
+# EOMail.co
 
 A full-featured Gmail replica transformed into an AI-powered autonomous email assistant. Built with React, TypeScript, Express, PostgreSQL, and Drizzle ORM.
 
@@ -21,7 +21,7 @@ A full-featured Gmail replica transformed into an AI-powered autonomous email as
 
 ## Named AI Agents
 
-Three specialized autonomous agents from the AIMAIL product blueprint:
+Three specialized autonomous agents from the EOMail product blueprint:
 
 1. **FinOps Auto-Resolver** (Level 4 Autonomy) — Intercepts financial emails (receipts, invoices, subscriptions), extracts amounts, auto-categorizes as finance. Shows Liquid UI finance card with extracted amounts and "Log to Accounting" action.
 
@@ -50,7 +50,7 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 
 ### AI Features
 - **Morning Briefing Dashboard**: "Chief of Staff" briefing with personalized greeting, stats cards, agent activity summary (per-agent task counts with icons), urgent emails list, "Process All with AI" button
-- **AI Action Center (Cmd+K)**: Agent-grouped command suggestions (FinOps, Chrono, Aegis, AIMAIL), command history (localStorage), inline AI response
+- **AI Action Center (Cmd+K)**: Agent-grouped command suggestions (FinOps, Chrono, Aegis, EOMail), command history (localStorage), inline AI response
 - **Liquid UI**: Category-specific interactive micro-app cards in email detail:
   - Finance: extracted amounts, "Log to Accounting", "Auto-Archive"
   - Scheduling: meeting detection, "Accept & Add to Calendar", "Suggest Alternatives"
@@ -63,7 +63,7 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 
 ## File Structure
 
-- `client/src/pages/auth.tsx` - Login/signup with AIMAIL branding and tagline
+- `client/src/pages/auth.tsx` - Login/signup with EOMail branding and tagline
 - `client/src/pages/mail.tsx` - Main mail page with all state management
 - `client/src/hooks/use-auth.tsx` - Auth context provider
 - `client/src/components/app-sidebar.tsx` - Sidebar with folders, labels, named Active Agents

@@ -163,7 +163,7 @@ export default function MailPage() {
       const now = new Date();
       await apiRequest("POST", "/api/emails", {
         from: user?.displayName || "You",
-        fromEmail: user?.email || "me@aimail.com",
+        fromEmail: user?.email || "me@eomail.co",
         to: data.to.split("@")[0] || data.to,
         toEmail: data.to,
         cc: data.cc || "",
@@ -208,7 +208,7 @@ export default function MailPage() {
       } else {
         await apiRequest("POST", "/api/emails", {
           from: user?.displayName || "You",
-          fromEmail: user?.email || "me@aimail.com",
+          fromEmail: user?.email || "me@eomail.co",
           to: data.to.split("@")[0] || data.to || "Draft",
           toEmail: data.to || "",
           cc: data.cc || "",

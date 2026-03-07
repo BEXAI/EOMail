@@ -29,8 +29,8 @@ interface CommandSuggestion {
 }
 
 const suggestions: CommandSuggestion[] = [
-  { text: "Summarize my unread emails", agent: "AIMAIL", icon: Sparkles, color: "text-purple-500" },
-  { text: "What needs my attention?", agent: "AIMAIL", icon: Sparkles, color: "text-purple-500" },
+  { text: "Summarize my unread emails", agent: "EOMail", icon: Sparkles, color: "text-purple-500" },
+  { text: "What needs my attention?", agent: "EOMail", icon: Sparkles, color: "text-purple-500" },
   { text: "Show financial summary", agent: "FinOps", icon: DollarSign, color: "text-emerald-500" },
   { text: "Find recent receipts and invoices", agent: "FinOps", icon: DollarSign, color: "text-emerald-500" },
   { text: "What meetings are coming up?", agent: "Chrono", icon: Calendar, color: "text-blue-500" },
@@ -39,7 +39,7 @@ const suggestions: CommandSuggestion[] = [
   { text: "Review quarantined emails", agent: "Aegis", icon: Shield, color: "text-red-500" },
 ];
 
-const HISTORY_KEY = "aimail-command-history";
+const HISTORY_KEY = "eomail-command-history";
 
 function getHistory(): string[] {
   try {

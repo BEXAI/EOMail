@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2 } from "lucide-react";
+import logoPath from "@assets/912AF931-1EA4-4CC4-8976-8C6D0557A5A5_1_105_c_1772859976130.jpeg";
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
@@ -22,12 +23,10 @@ export default function AuthPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
-            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary">
-              <span className="text-primary-foreground font-bold text-xl">AI</span>
-            </div>
+            <img src={logoPath} alt="EOMail logo" className="w-12 h-12 rounded-xl object-cover" />
             <div className="text-left">
-              <h1 className="text-3xl font-bold text-foreground tracking-tight">AIMAIL</h1>
-              <p className="text-xs text-muted-foreground">.com</p>
+              <h1 className="text-3xl font-bold text-foreground tracking-tight">EOMail</h1>
+              <p className="text-xs text-muted-foreground">.co</p>
             </div>
           </div>
           <p className="text-sm text-muted-foreground max-w-xs mx-auto">
@@ -67,7 +66,7 @@ function LoginForm({ loginMutation }: { loginMutation: any }) {
     <Card>
       <CardHeader>
         <CardTitle>Welcome back</CardTitle>
-        <CardDescription>Sign in to your AIMAIL account</CardDescription>
+        <CardDescription>Sign in to your EOMail account</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -144,7 +143,7 @@ function RegisterForm({ registerMutation }: { registerMutation: any }) {
     <Card>
       <CardHeader>
         <CardTitle>Create your account</CardTitle>
-        <CardDescription>Get started with AIMAIL — your AI-powered inbox</CardDescription>
+        <CardDescription>Get started with EOMail — your AI-powered inbox</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

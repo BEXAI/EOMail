@@ -31,7 +31,7 @@ export function setupAuth(app: Express) {
         tableName: "session",
         createTableIfMissing: false,
       }),
-      secret: process.env.SESSION_SECRET || "aimail-dev-secret",
+      secret: process.env.SESSION_SECRET || "eomail-dev-secret",
       resave: false,
       saveUninitialized: false,
       cookie: {

@@ -152,7 +152,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const agentCounts: Record<string, { complete: number; pending: number }> = {};
       for (const a of activities) {
-        const name = a.agentName || "AIMAIL Assistant";
+        const name = a.agentName || "EOMail Assistant";
         if (!agentCounts[name]) agentCounts[name] = { complete: 0, pending: 0 };
         if (a.status === "complete") agentCounts[name].complete++;
         else if (a.status === "pending") agentCounts[name].pending++;

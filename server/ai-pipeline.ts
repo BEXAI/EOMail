@@ -9,7 +9,7 @@ function getAgentName(category: string): string {
     case "scheduling":
       return "Chrono-Logistics Coordinator";
     default:
-      return "AIMAIL Assistant";
+      return "EOMail Assistant";
   }
 }
 
@@ -55,7 +55,7 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
     if (
       email.folder === "inbox" &&
       classification.suggestedAction === "reply" &&
-      email.fromEmail !== "me@aimail.com"
+      email.fromEmail !== "me@eomail.co"
     ) {
       aiDraftReplyText = await draftReply(email, userDisplayName);
     }

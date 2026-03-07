@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { type AgentActivity } from "@shared/schema";
+import logoPath from "@assets/912AF931-1EA4-4CC4-8976-8C6D0557A5A5_1_105_c_1772859976130.jpeg";
 import {
   Sidebar,
   SidebarContent,
@@ -77,7 +78,7 @@ const agentConfig: Record<string, { icon: typeof DollarSign; color: string; bgCo
   "FinOps Auto-Resolver": { icon: DollarSign, color: "text-emerald-500", bgColor: "bg-emerald-500/10", autonomy: "L4" },
   "Chrono-Logistics Coordinator": { icon: Calendar, color: "text-blue-500", bgColor: "bg-blue-500/10", autonomy: "L4" },
   "Aegis Gatekeeper": { icon: Shield, color: "text-red-500", bgColor: "bg-red-500/10", autonomy: "L5" },
-  "AIMAIL Assistant": { icon: Sparkles, color: "text-purple-500", bgColor: "bg-purple-500/10", autonomy: "L4" },
+  "EOMail Assistant": { icon: Sparkles, color: "text-purple-500", bgColor: "bg-purple-500/10", autonomy: "L4" },
 };
 
 function ActiveAgentsSection() {
@@ -114,7 +115,7 @@ function ActiveAgentsSection() {
           <SidebarGroupContent>
             <div className="space-y-0.5 px-2">
               {recent.map((activity) => {
-                const agent = agentConfig[activity.agentName || "AIMAIL Assistant"] || agentConfig["AIMAIL Assistant"];
+                const agent = agentConfig[activity.agentName || "EOMail Assistant"] || agentConfig["EOMail Assistant"];
                 const AgentIcon = agent.icon;
                 return (
                   <div
@@ -132,7 +133,7 @@ function ActiveAgentsSection() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
                         <span className={cn("font-medium truncate", agent.color)} style={{ fontSize: "10px" }}>
-                          {activity.agentName || "AIMAIL Assistant"}
+                          {activity.agentName || "EOMail Assistant"}
                         </span>
                         {activity.status === "complete" && (
                           <Check className="w-2.5 h-2.5 text-green-500 shrink-0" />
@@ -161,11 +162,9 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
     <Sidebar>
       <SidebarHeader className="px-3 pt-4 pb-2">
         <div className="flex items-center gap-2 px-1 mb-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary">
-            <span className="text-primary-foreground font-bold text-sm">AI</span>
-          </div>
+          <img src={logoPath} alt="EOMail logo" className="w-8 h-8 rounded-md object-cover" />
           <div className="flex flex-col">
-            <span className="font-bold text-base text-sidebar-foreground leading-tight tracking-tight">AIMAIL</span>
+            <span className="font-bold text-base text-sidebar-foreground leading-tight tracking-tight">EOMail</span>
             <span className="text-[10px] text-muted-foreground leading-tight">Inbox Zero → Zero Time Spent</span>
           </div>
         </div>
@@ -260,7 +259,7 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
           </Avatar>
           <div className="flex flex-col min-w-0 flex-1">
             <span className="text-sm font-medium text-sidebar-foreground truncate">{userName || "My Account"}</span>
-            <span className="text-xs text-muted-foreground truncate">{userEmail || "me@aimail.com"}</span>
+            <span className="text-xs text-muted-foreground truncate">{userEmail || "me@eomail.co"}</span>
           </div>
           <Settings className="w-4 h-4 text-muted-foreground shrink-0" />
         </div>
