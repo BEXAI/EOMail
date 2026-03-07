@@ -1,4 +1,3 @@
-import { Link, useLocation } from "wouter";
 import {
   Sidebar,
   SidebarContent,
@@ -11,7 +10,6 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Inbox,
@@ -21,13 +19,9 @@ import {
   AlertTriangle,
   Trash2,
   Plus,
-  ChevronDown,
   Tag,
-  Briefcase,
-  DollarSign,
-  Palette,
   Settings,
-  HelpCircle,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +30,8 @@ interface SidebarProps {
   counts: Record<string, number>;
   activeFolder: string;
   onFolderChange: (folder: string) => void;
+  activeLabel: string | null;
+  onLabelFilter: (label: string | null) => void;
 }
 
 const folders = [
@@ -45,6 +41,7 @@ const folders = [
   { id: "drafts", label: "Drafts", icon: FileText, countKey: "drafts" },
   { id: "spam", label: "Spam", icon: AlertTriangle, countKey: "spam" },
   { id: "trash", label: "Trash", icon: Trash2, countKey: "trash" },
+  { id: "all", label: "All Mail", icon: Mail, countKey: "all" },
 ];
 
 const labels = [
@@ -54,7 +51,7 @@ const labels = [
   { id: "important", label: "Important", color: "bg-rose-500" },
 ];
 
-export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange }: SidebarProps) {
+export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, activeLabel, onLabelFilter }: SidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader className="px-3 pt-4 pb-2">
@@ -85,11 +82,11 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange }: 
               {folders.map((folder) => {
                 const Icon = folder.icon;
                 const count = counts[folder.countKey] || 0;
-                const isActive = activeFolder === folder.id;
+                const isActive = activeFolder === folder.id && !activeLabel;
                 return (
                   <SidebarMenuItem key={folder.id}>
                     <SidebarMenuButton
-                      onClick={() => onFolderChange(folder.id)}
+                      onClick={() => { onLabelFilter(null); onFolderChange(folder.id); }}
                       isActive={isActive}
                       className={cn(
                         "rounded-full px-3 py-2 cursor-pointer transition-colors",
@@ -125,17 +122,25 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange }: 
           </div>
           <SidebarGroupContent>
             <SidebarMenu>
-              {labels.map((label) => (
-                <SidebarMenuItem key={label.id}>
-                  <SidebarMenuButton
-                    className="rounded-full px-3 py-1.5 cursor-pointer"
-                    data-testid={`nav-label-${label.id}`}
-                  >
-                    <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", label.color)} />
-                    <span className="text-sm">{label.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {labels.map((label) => {
+                const isActive = activeLabel === label.id;
+                return (
+                  <SidebarMenuItem key={label.id}>
+                    <SidebarMenuButton
+                      onClick={() => onLabelFilter(isActive ? null : label.id)}
+                      isActive={isActive}
+                      className={cn(
+                        "rounded-full px-3 py-1.5 cursor-pointer",
+                        isActive && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+                      )}
+                      data-testid={`nav-label-${label.id}`}
+                    >
+                      <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", label.color)} />
+                      <span className="text-sm">{label.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

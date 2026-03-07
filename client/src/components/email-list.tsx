@@ -4,7 +4,23 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Star, Paperclip, Archive, Trash2, Clock } from "lucide-react";
+import {
+  Star,
+  Paperclip,
+  Archive,
+  Trash2,
+  Mail,
+  MailOpen,
+  FolderInput,
+  Inbox,
+  AlertTriangle,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useState } from "react";
 
 interface EmailListProps {
@@ -14,8 +30,13 @@ interface EmailListProps {
   onSelect: (email: Email) => void;
   onStar: (id: string, starred: boolean) => void;
   onDelete: (id: string) => void;
+  onMarkRead: (id: string, read: boolean) => void;
+  onMove: (id: string, folder: string) => void;
+  onArchive: (id: string) => void;
+  onBulkAction: (ids: string[], action: string) => void;
   folder: string;
   search: string;
+  labelFilter: string | null;
 }
 
 function highlightText(text: string, search: string): string {
@@ -24,7 +45,21 @@ function highlightText(text: string, search: string): string {
   return text.replace(regex, "<mark class='bg-yellow-200 dark:bg-yellow-800 rounded-sm'>$1</mark>");
 }
 
-export function EmailList({ emails, isLoading, selectedId, onSelect, onStar, onDelete, folder, search }: EmailListProps) {
+export function EmailList({
+  emails,
+  isLoading,
+  selectedId,
+  onSelect,
+  onStar,
+  onDelete,
+  onMarkRead,
+  onMove,
+  onArchive,
+  onBulkAction,
+  folder,
+  search,
+  labelFilter,
+}: EmailListProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
 
@@ -37,6 +72,23 @@ export function EmailList({ emails, isLoading, selectedId, onSelect, onStar, onD
       return next;
     });
   };
+
+  const toggleSelectAll = () => {
+    if (checkedIds.size === emails.length) {
+      setCheckedIds(new Set());
+    } else {
+      setCheckedIds(new Set(emails.map((e) => e.id)));
+    }
+  };
+
+  const handleBulkAction = (action: string) => {
+    const ids = Array.from(checkedIds);
+    onBulkAction(ids, action);
+    setCheckedIds(new Set());
+  };
+
+  const hasChecked = checkedIds.size > 0;
+  const allChecked = emails.length > 0 && checkedIds.size === emails.length;
 
   if (isLoading) {
     return (
@@ -66,7 +118,7 @@ export function EmailList({ emails, isLoading, selectedId, onSelect, onStar, onD
           <Archive className="w-10 h-10 text-muted-foreground" />
         </div>
         <h3 className="text-lg font-semibold text-foreground mb-2">
-          {search ? "No results found" : "Nothing here"}
+          {search ? "No results found" : labelFilter ? "No emails with this label" : "Nothing here"}
         </h3>
         <p className="text-sm text-muted-foreground max-w-xs">
           {search
@@ -78,130 +130,220 @@ export function EmailList({ emails, isLoading, selectedId, onSelect, onStar, onD
   }
 
   return (
-    <div className="flex flex-col overflow-y-auto h-full">
-      {emails.map((email) => {
-        const isSelected = selectedId === email.id;
-        const isHovered = hoveredId === email.id;
-        const isChecked = checkedIds.has(email.id);
-        const initials = getInitials(email.from);
-        const avatarColor = getSenderColor(email.from);
+    <div className="flex flex-col h-full">
+      {hasChecked && (
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/50 shrink-0" data-testid="bulk-actions-bar">
+          <Checkbox
+            checked={allChecked}
+            onCheckedChange={toggleSelectAll}
+            className="w-4 h-4"
+            data-testid="checkbox-select-all"
+          />
+          <span className="text-xs text-muted-foreground mr-2">
+            {checkedIds.size} selected
+          </span>
+          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("delete")} data-testid="bulk-delete">
+            <Trash2 className="w-3.5 h-3.5" /> Delete
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("read")} data-testid="bulk-mark-read">
+            <MailOpen className="w-3.5 h-3.5" /> Read
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("unread")} data-testid="bulk-mark-unread">
+            <Mail className="w-3.5 h-3.5" /> Unread
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("star")} data-testid="bulk-star">
+            <Star className="w-3.5 h-3.5" /> Star
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("archive")} data-testid="bulk-archive">
+            <Archive className="w-3.5 h-3.5" /> Archive
+          </Button>
+        </div>
+      )}
 
-        return (
-          <div
-            key={email.id}
-            onClick={() => onSelect(email)}
-            onMouseEnter={() => setHoveredId(email.id)}
-            onMouseLeave={() => setHoveredId(null)}
-            data-testid={`email-item-${email.id}`}
-            className={cn(
-              "flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-border transition-colors relative group",
-              isSelected
-                ? "bg-primary/8 border-l-[3px] border-l-primary"
-                : !email.read
-                ? "bg-background"
-                : "bg-muted/30",
-              isHovered && !isSelected && "bg-muted/50"
-            )}
-          >
-            <div className="flex items-center gap-2 mt-1 shrink-0">
-              <div
-                onClick={(e) => toggleCheck(email.id, e)}
-                className={cn(
-                  "w-5 h-5 transition-opacity",
-                  isChecked || isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                )}
-              >
-                <Checkbox
-                  checked={isChecked}
-                  className="w-4 h-4"
-                  data-testid={`checkbox-email-${email.id}`}
-                />
-              </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); onStar(email.id, !email.starred); }}
-                className={cn(
-                  "shrink-0 transition-all",
-                  email.starred ? "text-amber-400" : "text-muted-foreground opacity-0 group-hover:opacity-100"
-                )}
-                data-testid={`star-email-${email.id}`}
-              >
-                <Star className={cn("w-4 h-4", email.starred && "fill-amber-400")} />
-              </button>
-            </div>
+      {!hasChecked && (
+        <div className="flex items-center px-4 py-1.5 border-b border-border shrink-0">
+          <Checkbox
+            checked={false}
+            onCheckedChange={toggleSelectAll}
+            className="w-4 h-4"
+            data-testid="checkbox-select-all"
+          />
+        </div>
+      )}
 
+      <div className="flex-1 overflow-y-auto">
+        {emails.map((email) => {
+          const isSelected = selectedId === email.id;
+          const isHovered = hoveredId === email.id;
+          const isChecked = checkedIds.has(email.id);
+          const initials = getInitials(email.from);
+          const avatarColor = getSenderColor(email.from);
+
+          return (
             <div
+              key={email.id}
+              onClick={() => onSelect(email)}
+              onMouseEnter={() => setHoveredId(email.id)}
+              onMouseLeave={() => setHoveredId(null)}
+              data-testid={`email-item-${email.id}`}
               className={cn(
-                "w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold mt-0.5",
-                avatarColor
+                "flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-border transition-colors relative group",
+                isSelected
+                  ? "bg-primary/8 border-l-[3px] border-l-primary"
+                  : !email.read
+                  ? "bg-background"
+                  : "bg-muted/30",
+                isHovered && !isSelected && "bg-muted/50"
               )}
             >
-              {initials}
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2 mb-0.5">
-                <span
+              <div className="flex items-center gap-2 mt-1 shrink-0">
+                <div
+                  onClick={(e) => toggleCheck(email.id, e)}
                   className={cn(
-                    "text-sm truncate",
-                    !email.read ? "font-bold text-foreground" : "font-medium text-foreground/80"
+                    "w-5 h-5 transition-opacity",
+                    isChecked || isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   )}
-                  data-testid={`sender-${email.id}`}
-                  dangerouslySetInnerHTML={{ __html: highlightText(email.from, search) }}
-                />
-                <div className="flex items-center gap-2 shrink-0">
-                  {isHovered && (
-                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6"
-                        onClick={() => onDelete(email.id)}
-                        data-testid={`delete-email-${email.id}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  )}
-                  <span className={cn("text-xs whitespace-nowrap", !email.read ? "font-semibold text-foreground" : "text-muted-foreground")}>
-                    {formatEmailTime(email.timestamp)}
-                  </span>
+                >
+                  <Checkbox
+                    checked={isChecked}
+                    className="w-4 h-4"
+                    data-testid={`checkbox-email-${email.id}`}
+                  />
                 </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onStar(email.id, !email.starred); }}
+                  className={cn(
+                    "shrink-0 transition-all",
+                    email.starred ? "text-amber-400" : "text-muted-foreground opacity-0 group-hover:opacity-100"
+                  )}
+                  data-testid={`star-email-${email.id}`}
+                >
+                  <Star className={cn("w-4 h-4", email.starred && "fill-amber-400")} />
+                </button>
               </div>
 
               <div
-                className={cn("text-sm truncate mb-0.5", !email.read ? "font-semibold text-foreground" : "text-foreground/70")}
-                dangerouslySetInnerHTML={{ __html: highlightText(email.subject, search) }}
-                data-testid={`subject-${email.id}`}
-              />
+                className={cn(
+                  "w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold mt-0.5",
+                  avatarColor
+                )}
+              >
+                {initials}
+              </div>
 
-              <div className="flex items-center gap-2">
-                <span
-                  className="text-xs text-muted-foreground truncate flex-1"
-                  dangerouslySetInnerHTML={{ __html: highlightText(email.preview, search) }}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <span
+                    className={cn(
+                      "text-sm truncate",
+                      !email.read ? "font-bold text-foreground" : "font-medium text-foreground/80"
+                    )}
+                    data-testid={`sender-${email.id}`}
+                    dangerouslySetInnerHTML={{ __html: highlightText(email.from, search) }}
+                  />
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isHovered && (
+                      <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => onArchive(email.id)}
+                          data-testid={`archive-email-${email.id}`}
+                          title="Archive"
+                        >
+                          <Archive className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => onDelete(email.id)}
+                          data-testid={`delete-email-${email.id}`}
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => onMarkRead(email.id, !email.read)}
+                          data-testid={`toggle-read-${email.id}`}
+                          title={email.read ? "Mark unread" : "Mark read"}
+                        >
+                          {email.read ? <Mail className="w-3.5 h-3.5" /> : <MailOpen className="w-3.5 h-3.5" />}
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6"
+                              data-testid={`move-email-${email.id}`}
+                              title="Move to"
+                            >
+                              <FolderInput className="w-3.5 h-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => onMove(email.id, "inbox")} data-testid={`move-to-inbox-${email.id}`}>
+                              <Inbox className="w-3.5 h-3.5 mr-2" /> Inbox
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onArchive(email.id)} data-testid={`move-to-archive-${email.id}`}>
+                              <Archive className="w-3.5 h-3.5 mr-2" /> Archive
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onMove(email.id, "spam")} data-testid={`move-to-spam-${email.id}`}>
+                              <AlertTriangle className="w-3.5 h-3.5 mr-2" /> Spam
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onDelete(email.id)} data-testid={`move-to-trash-${email.id}`}>
+                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Trash
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )}
+                    <span className={cn("text-xs whitespace-nowrap", !email.read ? "font-semibold text-foreground" : "text-muted-foreground")}>
+                      {formatEmailTime(email.timestamp)}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  className={cn("text-sm truncate mb-0.5", !email.read ? "font-semibold text-foreground" : "text-foreground/70")}
+                  dangerouslySetInnerHTML={{ __html: highlightText(email.subject, search) }}
+                  data-testid={`subject-${email.id}`}
                 />
-                <div className="flex items-center gap-1 shrink-0">
-                  {email.attachments > 0 && (
-                    <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
-                  )}
-                  {email.labels.map((label) => (
-                    <Badge
-                      key={label}
-                      variant="secondary"
-                      className="text-xs py-0 px-1.5 h-4"
-                      data-testid={`label-${email.id}-${label}`}
-                    >
-                      {label}
-                    </Badge>
-                  ))}
-                  {!email.read && (
-                    <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
-                  )}
+
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-xs text-muted-foreground truncate flex-1"
+                    dangerouslySetInnerHTML={{ __html: highlightText(email.preview, search) }}
+                  />
+                  <div className="flex items-center gap-1 shrink-0">
+                    {email.attachments > 0 && (
+                      <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
+                    {email.labels.map((label) => (
+                      <Badge
+                        key={label}
+                        variant="secondary"
+                        className="text-xs py-0 px-1.5 h-4"
+                        data-testid={`label-${email.id}-${label}`}
+                      >
+                        {label}
+                      </Badge>
+                    ))}
+                    {!email.read && (
+                      <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -17,6 +17,8 @@ export const emails = pgTable("emails", {
   fromEmail: text("from_email").notNull(),
   to: text("to").notNull(),
   toEmail: text("to_email").notNull(),
+  cc: text("cc").default(""),
+  bcc: text("bcc").default(""),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
   preview: text("preview").notNull(),

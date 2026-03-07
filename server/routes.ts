@@ -9,7 +9,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const folder = (req.query.folder as string) || "inbox";
       const search = req.query.search as string | undefined;
-      const emails = await storage.getEmails(folder, search);
+      const label = req.query.label as string | undefined;
+      const emails = await storage.getEmails(folder, search, label);
       res.json(emails);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch emails" });
@@ -57,6 +58,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: "Failed to update email" });
+    }
+  });
+
+  app.post("/api/emails/bulk", async (req, res) => {
+    try {
+      const { ids, action, updates } = req.body as {
+        ids: string[];
+        action: "update" | "delete";
+        updates?: Partial<any>;
+      };
+      if (!ids || !Array.isArray(ids) || !action) {
+        return res.status(400).json({ error: "ids and action required" });
+      }
+      if (action === "delete") {
+        const count = await storage.deleteEmails(ids);
+        return res.json({ deleted: count });
+      }
+      if (action === "update" && updates) {
+        const results = await storage.updateEmails(ids, updates);
+        return res.json(results);
+      }
+      res.status(400).json({ error: "Invalid action" });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to perform bulk action" });
     }
   });
 

@@ -1,7 +1,6 @@
 import { type Email } from "@shared/schema";
-import { formatEmailTime, getInitials, getSenderColor, cn } from "@/lib/utils";
+import { getInitials, getSenderColor, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,13 +15,18 @@ import {
   MoreVertical,
   Paperclip,
   Printer,
-  ExternalLink,
   ChevronDown,
+  FolderInput,
+  Inbox,
+  AlertTriangle,
+  Mail,
+  MailOpen,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -33,9 +37,12 @@ interface EmailDetailProps {
   onStar: (id: string, starred: boolean) => void;
   onDelete: (id: string) => void;
   onReply: (email: Email) => void;
+  onMarkRead: (id: string, read: boolean) => void;
+  onMove: (id: string, folder: string) => void;
+  onArchive: (id: string) => void;
 }
 
-export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onReply }: EmailDetailProps) {
+export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onReply, onMarkRead, onMove, onArchive }: EmailDetailProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full p-6 gap-4">
@@ -81,13 +88,12 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
 
   return (
     <div className="flex flex-col h-full overflow-hidden" data-testid="email-detail">
-      <div className="flex items-center justify-between px-6 py-3 border-b border-border shrink-0">
+      <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
           <Button
             size="icon"
             variant="ghost"
             onClick={onBack}
-            className="md:hidden"
             data-testid="button-back"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -96,7 +102,7 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
             <Button size="icon" variant="ghost" onClick={() => onStar(email.id, !email.starred)} data-testid="button-star-detail">
               <Star className={cn("w-4 h-4", email.starred ? "fill-amber-400 text-amber-400" : "text-muted-foreground")} />
             </Button>
-            <Button size="icon" variant="ghost" data-testid="button-archive-detail">
+            <Button size="icon" variant="ghost" onClick={() => onArchive(email.id)} data-testid="button-archive-detail" title="Archive">
               <Archive className="w-4 h-4 text-muted-foreground" />
             </Button>
             <Button
@@ -104,9 +110,40 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
               variant="ghost"
               onClick={() => onDelete(email.id)}
               data-testid="button-delete-detail"
+              title="Delete"
             >
               <Trash2 className="w-4 h-4 text-muted-foreground" />
             </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => onMarkRead(email.id, !email.read)}
+              data-testid="button-toggle-read-detail"
+              title={email.read ? "Mark as unread" : "Mark as read"}
+            >
+              {email.read ? <Mail className="w-4 h-4 text-muted-foreground" /> : <MailOpen className="w-4 h-4 text-muted-foreground" />}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost" data-testid="button-move-detail" title="Move to">
+                  <FolderInput className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => onMove(email.id, "inbox")} data-testid="detail-move-inbox">
+                  <Inbox className="w-3.5 h-3.5 mr-2" /> Move to Inbox
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onArchive(email.id)} data-testid="detail-move-archive">
+                  <Archive className="w-3.5 h-3.5 mr-2" /> Archive
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onMove(email.id, "spam")} data-testid="detail-move-spam">
+                  <AlertTriangle className="w-3.5 h-3.5 mr-2" /> Report Spam
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onDelete(email.id)} data-testid="detail-move-trash">
+                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Move to Trash
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -120,8 +157,13 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>Mark as unread</DropdownMenuItem>
-              <DropdownMenuItem>Add star</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onMarkRead(email.id, !email.read)} data-testid="menu-toggle-read">
+                {email.read ? "Mark as unread" : "Mark as read"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onStar(email.id, !email.starred)}>
+                {email.starred ? "Remove star" : "Add star"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem>Filter messages like this</DropdownMenuItem>
               <DropdownMenuItem>Mute</DropdownMenuItem>
             </DropdownMenuContent>
@@ -130,7 +172,7 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="px-6 pt-6 pb-4">
+        <div className="px-4 md:px-6 pt-6 pb-4">
           <h1 className="text-2xl font-semibold text-foreground mb-4 leading-tight" data-testid="email-subject-detail">
             {email.subject}
           </h1>
@@ -220,7 +262,7 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
         </div>
       </div>
 
-      <div className="px-6 py-4 border-t border-border shrink-0">
+      <div className="px-4 md:px-6 py-4 border-t border-border shrink-0">
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"

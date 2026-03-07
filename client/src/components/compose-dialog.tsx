@@ -1,9 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -14,12 +12,10 @@ import {
   Italic,
   Underline,
   Link,
-  Image,
   List,
   Paperclip,
   Smile,
   Trash2,
-  ChevronDown,
   Send,
 } from "lucide-react";
 import { type Email } from "@shared/schema";
@@ -27,47 +23,53 @@ import { type Email } from "@shared/schema";
 interface ComposeDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onSend: (data: ComposeData) => void;
+  isSending: boolean;
   replyTo?: Email | null;
 }
 
-export function ComposeDialog({ isOpen, onClose, replyTo }: ComposeDialogProps) {
+export interface ComposeData {
+  to: string;
+  cc: string;
+  bcc: string;
+  subject: string;
+  body: string;
+}
+
+export function ComposeDialog({ isOpen, onClose, onSend, isSending, replyTo }: ComposeDialogProps) {
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
-  const [to, setTo] = useState(replyTo ? replyTo.fromEmail : "");
-  const [subject, setSubject] = useState(replyTo ? `Re: ${replyTo.subject}` : "");
+  const [to, setTo] = useState("");
+  const [cc, setCc] = useState("");
+  const [bcc, setBcc] = useState("");
+  const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [showCc, setShowCc] = useState(false);
+  const [showBcc, setShowBcc] = useState(false);
 
-  const sendMutation = useMutation({
-    mutationFn: async () => {
-      const now = new Date();
-      await apiRequest("POST", "/api/emails", {
-        from: "You",
-        fromEmail: "me@aimail.com",
-        to: to.split("@")[0] || to,
-        toEmail: to,
-        subject: subject || "(no subject)",
-        body: `<p>${body.replace(/\n/g, "</p><p>")}</p>`,
-        preview: body.slice(0, 120),
-        timestamp: now.toISOString(),
-        read: true,
-        starred: false,
-        folder: "sent",
-        labels: [],
-        attachments: 0,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
-      toast({ title: "Email sent", description: "Your message has been sent successfully." });
-      onClose();
-    },
-    onError: () => {
-      toast({ title: "Failed to send", description: "Something went wrong. Please try again.", variant: "destructive" });
-    },
-  });
+  useEffect(() => {
+    if (isOpen) {
+      if (replyTo) {
+        setTo(replyTo.fromEmail);
+        setSubject(`Re: ${replyTo.subject.replace(/^Re: /, "")}`);
+      } else {
+        setTo("");
+        setSubject("");
+      }
+      setBody("");
+      setCc("");
+      setBcc("");
+      setShowCc(false);
+      setShowBcc(false);
+      setMinimized(false);
+      setMaximized(false);
+    }
+  }, [isOpen, replyTo]);
+
+  const handleSend = () => {
+    if (!to) return;
+    onSend({ to, cc, bcc, subject, body });
+  };
 
   if (!isOpen) return null;
 
@@ -79,7 +81,7 @@ export function ComposeDialog({ isOpen, onClose, replyTo }: ComposeDialogProps) 
           ? "inset-4 rounded-lg"
           : minimized
           ? "bottom-0 right-6 w-80 h-12 rounded-t-lg overflow-hidden"
-          : "bottom-0 right-6 w-[520px] h-[500px] rounded-t-lg"
+          : "bottom-0 right-4 md:right-6 w-[calc(100vw-2rem)] md:w-[520px] h-[500px] rounded-t-lg"
       )}
     >
       <div
@@ -133,10 +135,50 @@ export function ComposeDialog({ isOpen, onClose, replyTo }: ComposeDialogProps) 
                 data-testid="input-compose-to"
               />
               <div className="flex items-center gap-1 shrink-0">
-                <button className="text-xs text-primary font-medium">Cc</button>
-                <button className="text-xs text-primary font-medium ml-2">Bcc</button>
+                {!showCc && (
+                  <button
+                    className="text-xs text-primary font-medium"
+                    onClick={() => setShowCc(true)}
+                    data-testid="button-show-cc"
+                  >
+                    Cc
+                  </button>
+                )}
+                {!showBcc && (
+                  <button
+                    className="text-xs text-primary font-medium ml-2"
+                    onClick={() => setShowBcc(true)}
+                    data-testid="button-show-bcc"
+                  >
+                    Bcc
+                  </button>
+                )}
               </div>
             </div>
+            {showCc && (
+              <div className="flex items-center px-4 py-2 border-b border-border gap-2">
+                <span className="text-xs text-muted-foreground w-12 shrink-0">Cc</span>
+                <Input
+                  value={cc}
+                  onChange={(e) => setCc(e.target.value)}
+                  placeholder="CC recipients"
+                  className="border-0 shadow-none focus-visible:ring-0 text-sm h-7 px-0"
+                  data-testid="input-compose-cc"
+                />
+              </div>
+            )}
+            {showBcc && (
+              <div className="flex items-center px-4 py-2 border-b border-border gap-2">
+                <span className="text-xs text-muted-foreground w-12 shrink-0">Bcc</span>
+                <Input
+                  value={bcc}
+                  onChange={(e) => setBcc(e.target.value)}
+                  placeholder="BCC recipients"
+                  className="border-0 shadow-none focus-visible:ring-0 text-sm h-7 px-0"
+                  data-testid="input-compose-bcc"
+                />
+              </div>
+            )}
             <div className="flex items-center px-4 py-2 border-b border-border gap-2">
               <span className="text-xs text-muted-foreground w-12 shrink-0">Subject</span>
               <Input
@@ -162,16 +204,16 @@ export function ComposeDialog({ isOpen, onClose, replyTo }: ComposeDialogProps) 
           <div className="flex items-center justify-between px-4 py-3 border-t border-border shrink-0">
             <div className="flex items-center gap-1">
               <Button
-                onClick={() => sendMutation.mutate()}
-                disabled={sendMutation.isPending || !to}
+                onClick={handleSend}
+                disabled={isSending || !to}
                 className="gap-2 rounded-full"
                 size="sm"
                 data-testid="button-send-email"
               >
                 <Send className="w-3.5 h-3.5" />
-                {sendMutation.isPending ? "Sending..." : "Send"}
+                {isSending ? "Sending..." : "Send"}
               </Button>
-              <div className="flex items-center ml-1">
+              <div className="hidden md:flex items-center ml-1">
                 <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-compose-bold">
                   <Bold className="w-4 h-4 text-muted-foreground" />
                 </Button>

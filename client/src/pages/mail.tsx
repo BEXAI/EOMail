@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { type Email, type EmailFolder } from "@shared/schema";
+import { type Email } from "@shared/schema";
 import { AppSidebar } from "@/components/app-sidebar";
 import { EmailList } from "@/components/email-list";
 import { EmailDetail } from "@/components/email-detail";
-import { ComposeDialog } from "@/components/compose-dialog";
+import { ComposeDialog, type ComposeData } from "@/components/compose-dialog";
 import {
   SidebarProvider,
   SidebarTrigger,
@@ -17,15 +17,20 @@ import {
   Search,
   RefreshCw,
   Settings,
-  ChevronDown,
   X,
   SlidersHorizontal,
   Moon,
   Sun,
+  Keyboard,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const FOLDER_LABELS: Record<string, string> = {
   inbox: "Inbox",
@@ -34,6 +39,7 @@ const FOLDER_LABELS: Record<string, string> = {
   drafts: "Drafts",
   spam: "Spam",
   trash: "Trash",
+  all: "All Mail",
 };
 
 function ThemeToggle() {
@@ -41,8 +47,18 @@ function ThemeToggle() {
 
   const toggle = () => {
     document.documentElement.classList.toggle("dark");
-    setDark((d) => !d);
+    const isDark = document.documentElement.classList.contains("dark");
+    setDark(isDark);
+    localStorage.setItem("theme", isDark ? "dark" : "light");
   };
+
+  useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved === "dark") {
+      document.documentElement.classList.add("dark");
+      setDark(true);
+    }
+  }, []);
 
   return (
     <Button size="icon" variant="ghost" onClick={toggle} data-testid="button-theme-toggle">
@@ -58,15 +74,21 @@ export default function MailPage() {
   const [replyTo, setReplyTo] = useState<Email | null>(null);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [pendingSend, setPendingSend] = useState<ComposeData | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const queryParams = new URLSearchParams({ folder });
+  if (search) queryParams.append("search", search);
+  if (labelFilter) queryParams.append("label", labelFilter);
 
   const { data: emails = [], isLoading: emailsLoading } = useQuery<Email[]>({
-    queryKey: ["/api/emails", folder, search],
+    queryKey: ["/api/emails", folder, search, labelFilter],
     queryFn: async () => {
-      const params = new URLSearchParams({ folder });
-      if (search) params.append("search", search);
-      const res = await fetch(`/api/emails?${params}`);
+      const res = await fetch(`/api/emails?${queryParams}`);
       if (!res.ok) throw new Error("Failed to fetch emails");
       return res.json();
     },
@@ -76,13 +98,20 @@ export default function MailPage() {
     queryKey: ["/api/emails/counts"],
   });
 
+  const invalidateAll = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+  }, [queryClient]);
+
   const markReadMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("PATCH", `/api/emails/${id}`, { read: true });
+    mutationFn: async ({ id, read }: { id: string; read: boolean }) => {
+      await apiRequest("PATCH", `/api/emails/${id}`, { read });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+    onSuccess: (_, { id, read }) => {
+      invalidateAll();
+      if (selectedEmail?.id === id) {
+        setSelectedEmail((prev) => prev ? { ...prev, read } : null);
+      }
     },
   });
 
@@ -90,11 +119,10 @@ export default function MailPage() {
     mutationFn: async ({ id, starred }: { id: string; starred: boolean }) => {
       await apiRequest("PATCH", `/api/emails/${id}`, { starred });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
-      if (selectedEmail) {
-        setSelectedEmail((prev) => prev ? { ...prev, starred: !prev.starred } : null);
+    onSuccess: (_, { id, starred }) => {
+      invalidateAll();
+      if (selectedEmail?.id === id) {
+        setSelectedEmail((prev) => prev ? { ...prev, starred } : null);
       }
     },
   });
@@ -108,16 +136,99 @@ export default function MailPage() {
       }
     },
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+      invalidateAll();
       if (selectedEmail?.id === id) setSelectedEmail(null);
-      toast({ title: folder === "trash" ? "Email deleted" : "Moved to trash" });
+      toast({ title: folder === "trash" ? "Email deleted permanently" : "Moved to trash" });
+    },
+  });
+
+  const moveMutation = useMutation({
+    mutationFn: async ({ id, targetFolder }: { id: string; targetFolder: string }) => {
+      await apiRequest("PATCH", `/api/emails/${id}`, { folder: targetFolder });
+    },
+    onSuccess: (_, { id, targetFolder }) => {
+      invalidateAll();
+      if (selectedEmail?.id === id) setSelectedEmail(null);
+      toast({ title: `Moved to ${FOLDER_LABELS[targetFolder] || targetFolder}` });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PATCH", `/api/emails/${id}`, { folder: "all" });
+    },
+    onSuccess: (_, id) => {
+      invalidateAll();
+      if (selectedEmail?.id === id) setSelectedEmail(null);
+      toast({ title: "Archived" });
+    },
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: async (data: ComposeData) => {
+      const now = new Date();
+      await apiRequest("POST", "/api/emails", {
+        from: "You",
+        fromEmail: "me@aimail.com",
+        to: data.to.split("@")[0] || data.to,
+        toEmail: data.to,
+        cc: data.cc || "",
+        bcc: data.bcc || "",
+        subject: data.subject || "(no subject)",
+        body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
+        preview: data.body.slice(0, 120),
+        timestamp: now.toISOString(),
+        read: true,
+        starred: false,
+        folder: "sent",
+        labels: [],
+        attachments: 0,
+      });
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast({ title: "Email sent", description: "Your message has been sent successfully." });
+    },
+    onError: () => {
+      toast({ title: "Failed to send", description: "Something went wrong. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: async ({ ids, action }: { ids: string[]; action: string }) => {
+      if (action === "delete") {
+        if (folder === "trash") {
+          await apiRequest("POST", "/api/emails/bulk", { ids, action: "delete" });
+        } else {
+          await apiRequest("POST", "/api/emails/bulk", { ids, action: "update", updates: { folder: "trash" } });
+        }
+      } else if (action === "read") {
+        await apiRequest("POST", "/api/emails/bulk", { ids, action: "update", updates: { read: true } });
+      } else if (action === "unread") {
+        await apiRequest("POST", "/api/emails/bulk", { ids, action: "update", updates: { read: false } });
+      } else if (action === "star") {
+        await apiRequest("POST", "/api/emails/bulk", { ids, action: "update", updates: { starred: true } });
+      } else if (action === "archive") {
+        await apiRequest("POST", "/api/emails/bulk", { ids, action: "update", updates: { folder: "all" } });
+      }
+    },
+    onSuccess: (_, { action }) => {
+      invalidateAll();
+      setSelectedEmail(null);
+      const messages: Record<string, string> = {
+        delete: folder === "trash" ? "Emails deleted permanently" : "Moved to trash",
+        read: "Marked as read",
+        unread: "Marked as unread",
+        star: "Starred",
+        archive: "Archived",
+      };
+      toast({ title: messages[action] || "Done" });
     },
   });
 
   const handleSelectEmail = (email: Email) => {
     setSelectedEmail(email);
-    if (!email.read) markReadMutation.mutate(email.id);
+    if (!email.read) markReadMutation.mutate({ id: email.id, read: true });
   };
 
   const handleFolderChange = (newFolder: string) => {
@@ -125,6 +236,16 @@ export default function MailPage() {
     setSelectedEmail(null);
     setSearch("");
     setSearchInput("");
+  };
+
+  const handleLabelFilter = (label: string | null) => {
+    setLabelFilter(label);
+    setSelectedEmail(null);
+    if (label) {
+      setFolder("inbox");
+      setSearch("");
+      setSearchInput("");
+    }
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -143,24 +264,154 @@ export default function MailPage() {
   };
 
   const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+    invalidateAll();
     toast({ title: "Refreshed" });
   };
+
+  const handleSend = (data: ComposeData) => {
+    setComposing(false);
+    setPendingSend(data);
+
+    const { dismiss } = toast({
+      title: "Sending...",
+      description: "Email will be sent in 5 seconds",
+      action: (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (undoTimer) clearTimeout(undoTimer);
+            setUndoTimer(null);
+            setPendingSend(null);
+            dismiss();
+            setComposing(true);
+            toast({ title: "Send cancelled" });
+          }}
+          data-testid="button-undo-send"
+        >
+          Undo
+        </Button>
+      ),
+      duration: 5500,
+    });
+
+    const timer = setTimeout(() => {
+      sendMutation.mutate(data);
+      setPendingSend(null);
+      setUndoTimer(null);
+      setReplyTo(null);
+    }, 5000);
+
+    setUndoTimer(timer);
+  };
+
+  const handleCompose = () => {
+    setReplyTo(null);
+    setComposing(true);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (undoTimer) clearTimeout(undoTimer);
+    };
+  }, [undoTimer]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+      if (isInput) return;
+
+      switch (e.key) {
+        case "c":
+          e.preventDefault();
+          handleCompose();
+          break;
+        case "r":
+          if (selectedEmail) {
+            e.preventDefault();
+            handleReply(selectedEmail);
+          }
+          break;
+        case "s":
+          if (selectedEmail) {
+            e.preventDefault();
+            starMutation.mutate({ id: selectedEmail.id, starred: !selectedEmail.starred });
+          }
+          break;
+        case "e":
+          if (selectedEmail) {
+            e.preventDefault();
+            archiveMutation.mutate(selectedEmail.id);
+          }
+          break;
+        case "#":
+          if (selectedEmail) {
+            e.preventDefault();
+            deleteMutation.mutate(selectedEmail.id);
+          }
+          break;
+        case "/":
+          e.preventDefault();
+          searchRef.current?.focus();
+          break;
+        case "Escape":
+          if (composing) {
+            setComposing(false);
+            setReplyTo(null);
+          } else if (selectedEmail) {
+            setSelectedEmail(null);
+          }
+          break;
+        case "j": {
+          e.preventDefault();
+          const currentIndex = emails.findIndex((em) => em.id === selectedEmail?.id);
+          if (currentIndex < emails.length - 1) {
+            handleSelectEmail(emails[currentIndex + 1]);
+          } else if (currentIndex === -1 && emails.length > 0) {
+            handleSelectEmail(emails[0]);
+          }
+          break;
+        }
+        case "k": {
+          e.preventDefault();
+          const currentIdx = emails.findIndex((em) => em.id === selectedEmail?.id);
+          if (currentIdx > 0) {
+            handleSelectEmail(emails[currentIdx - 1]);
+          }
+          break;
+        }
+        case "Enter":
+          if (!selectedEmail && emails.length > 0) {
+            handleSelectEmail(emails[0]);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedEmail, composing, emails]);
 
   const sidebarStyle = {
     "--sidebar-width": "15rem",
     "--sidebar-width-icon": "3rem",
   };
 
+  const headerTitle = labelFilter
+    ? `Label: ${labelFilter.charAt(0).toUpperCase() + labelFilter.slice(1)}`
+    : FOLDER_LABELS[folder] || folder;
+
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full bg-background overflow-hidden">
         <AppSidebar
-          onCompose={() => { setReplyTo(null); setComposing(true); }}
+          onCompose={handleCompose}
           counts={counts}
           activeFolder={folder}
           onFolderChange={handleFolderChange}
+          activeLabel={labelFilter}
+          onLabelFilter={handleLabelFilter}
         />
 
         <SidebarInset className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -171,10 +422,11 @@ export default function MailPage() {
               <div className="relative flex items-center">
                 <Search className="absolute left-3 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <Input
+                  ref={searchRef}
                   type="search"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Search mail"
+                  placeholder="Search mail (Press /)"
                   className="pl-9 pr-9 rounded-full bg-muted border-0 focus-visible:ring-1 focus-visible:bg-background"
                   data-testid="input-search"
                 />
@@ -191,17 +443,37 @@ export default function MailPage() {
               </div>
             </form>
             <div className="flex items-center gap-1 ml-auto shrink-0">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={handleRefresh}
-                data-testid="button-refresh"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </Button>
-              <Button size="icon" variant="ghost" data-testid="button-settings">
-                <Settings className="w-4 h-4" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleRefresh}
+                    data-testid="button-refresh"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Refresh</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" data-testid="button-keyboard-shortcuts">
+                    <Keyboard className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">
+                  <div className="space-y-1">
+                    <div><kbd className="bg-muted px-1 rounded text-xs">c</kbd> Compose</div>
+                    <div><kbd className="bg-muted px-1 rounded text-xs">r</kbd> Reply</div>
+                    <div><kbd className="bg-muted px-1 rounded text-xs">s</kbd> Star</div>
+                    <div><kbd className="bg-muted px-1 rounded text-xs">e</kbd> Archive</div>
+                    <div><kbd className="bg-muted px-1 rounded text-xs">j/k</kbd> Navigate</div>
+                    <div><kbd className="bg-muted px-1 rounded text-xs">/</kbd> Search</div>
+                    <div><kbd className="bg-muted px-1 rounded text-xs">Esc</kbd> Close</div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
               <ThemeToggle />
               <div
                 className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold cursor-pointer ml-1"
@@ -215,14 +487,16 @@ export default function MailPage() {
           <div className="flex flex-1 min-h-0 overflow-hidden">
             <div
               className={cn(
-                "flex flex-col border-r border-border shrink-0 overflow-hidden transition-all",
-                selectedEmail ? "w-[380px] min-w-[280px]" : "flex-1"
+                "flex flex-col border-r border-border overflow-hidden transition-all",
+                selectedEmail
+                  ? "hidden md:flex md:w-[380px] md:min-w-[280px] md:shrink-0"
+                  : "flex-1"
               )}
             >
               <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
                 <div className="flex items-center gap-2">
                   <h2 className="font-semibold text-sm text-foreground" data-testid="folder-title">
-                    {FOLDER_LABELS[folder] || folder}
+                    {headerTitle}
                   </h2>
                   {search && (
                     <span className="text-xs text-muted-foreground">
@@ -245,8 +519,13 @@ export default function MailPage() {
                   onSelect={handleSelectEmail}
                   onStar={(id, starred) => starMutation.mutate({ id, starred })}
                   onDelete={(id) => deleteMutation.mutate(id)}
+                  onMarkRead={(id, read) => markReadMutation.mutate({ id, read })}
+                  onMove={(id, targetFolder) => moveMutation.mutate({ id, targetFolder })}
+                  onArchive={(id) => archiveMutation.mutate(id)}
+                  onBulkAction={(ids, action) => bulkMutation.mutate({ ids, action })}
                   folder={folder}
                   search={search}
+                  labelFilter={labelFilter}
                 />
               </div>
             </div>
@@ -259,6 +538,9 @@ export default function MailPage() {
                   onStar={(id, starred) => starMutation.mutate({ id, starred })}
                   onDelete={(id) => deleteMutation.mutate(id)}
                   onReply={handleReply}
+                  onMarkRead={(id, read) => markReadMutation.mutate({ id, read })}
+                  onMove={(id, targetFolder) => moveMutation.mutate({ id, targetFolder })}
+                  onArchive={(id) => archiveMutation.mutate(id)}
                 />
               </div>
             )}
@@ -273,6 +555,9 @@ export default function MailPage() {
                   </div>
                   <h3 className="text-lg font-semibold text-foreground mb-1">AIMAIL</h3>
                   <p className="text-sm text-muted-foreground">Select an email to read</p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Press <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">c</kbd> to compose
+                  </p>
                 </div>
               </div>
             )}
@@ -283,6 +568,8 @@ export default function MailPage() {
       <ComposeDialog
         isOpen={composing}
         onClose={() => { setComposing(false); setReplyTo(null); }}
+        onSend={handleSend}
+        isSending={sendMutation.isPending}
         replyTo={replyTo}
       />
     </SidebarProvider>

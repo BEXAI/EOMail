@@ -6,11 +6,13 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
-  getEmails(folder: string, search?: string): Promise<Email[]>;
+  getEmails(folder: string, search?: string, label?: string): Promise<Email[]>;
   getEmail(id: string): Promise<Email | undefined>;
   createEmail(email: InsertEmail): Promise<Email>;
   updateEmail(id: string, updates: Partial<Email>): Promise<Email | undefined>;
+  updateEmails(ids: string[], updates: Partial<Email>): Promise<Email[]>;
   deleteEmail(id: string): Promise<boolean>;
+  deleteEmails(ids: string[]): Promise<number>;
   getEmailCounts(): Promise<Record<string, number>>;
 }
 
@@ -244,11 +246,16 @@ export class MemStorage implements IStorage {
     return user;
   }
 
-  async getEmails(folder: string, search?: string): Promise<Email[]> {
+  async getEmails(folder: string, search?: string, label?: string): Promise<Email[]> {
     let result = Array.from(this.emails.values()).filter((e) => {
       if (folder === "starred") return e.starred && e.folder !== "trash";
+      if (folder === "all") return e.folder !== "trash" && e.folder !== "spam";
       return e.folder === folder;
     });
+
+    if (label) {
+      result = result.filter((e) => e.labels.includes(label));
+    }
 
     if (search) {
       const q = search.toLowerCase();
@@ -283,8 +290,25 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async updateEmails(ids: string[], updates: Partial<Email>): Promise<Email[]> {
+    const results: Email[] = [];
+    for (const id of ids) {
+      const updated = await this.updateEmail(id, updates);
+      if (updated) results.push(updated);
+    }
+    return results;
+  }
+
   async deleteEmail(id: string): Promise<boolean> {
     return this.emails.delete(id);
+  }
+
+  async deleteEmails(ids: string[]): Promise<number> {
+    let count = 0;
+    for (const id of ids) {
+      if (this.emails.delete(id)) count++;
+    }
+    return count;
   }
 
   async getEmailCounts(): Promise<Record<string, number>> {
@@ -292,10 +316,11 @@ export class MemStorage implements IStorage {
     return {
       inbox: emails.filter((e) => e.folder === "inbox" && !e.read).length,
       starred: emails.filter((e) => e.starred && e.folder !== "trash").length,
-      sent: 0,
+      sent: emails.filter((e) => e.folder === "sent").length,
       drafts: emails.filter((e) => e.folder === "drafts").length,
       spam: emails.filter((e) => e.folder === "spam").length,
-      trash: 0,
+      trash: emails.filter((e) => e.folder === "trash").length,
+      all: emails.filter((e) => e.folder !== "trash" && e.folder !== "spam").length,
     };
   }
 }
