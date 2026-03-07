@@ -10,17 +10,43 @@ interface CachedContext {
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_CONTEXT_EMAILS = 20;
 const MAX_CONTEXT_CHARS = 14000;
+const MAX_CACHE_SIZE = 1000;
 
 class EmailContextIndex {
   private cache = new Map<string, CachedContext>();
+
+  constructor() {
+    // Periodic sweep to evict expired entries and prevent memory leaks
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, cached] of this.cache) {
+        if (now - cached.timestamp > CACHE_TTL_MS) {
+          this.cache.delete(key);
+        }
+      }
+    }, 60 * 1000);
+  }
+
+  private enforceMaxSize(): void {
+    if (this.cache.size < MAX_CACHE_SIZE) return;
+    // Evict oldest entries
+    let oldest: { key: string; ts: number } | null = null;
+    for (const [key, cached] of this.cache) {
+      if (!oldest || cached.timestamp < oldest.ts) {
+        oldest = { key, ts: cached.timestamp };
+      }
+    }
+    if (oldest) this.cache.delete(oldest.key);
+  }
 
   async getContext(userId: string): Promise<string> {
     const cached = this.cache.get(userId);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       return cached.contextString;
     }
-    const emails = await storage.getEmails(userId, "all");
+    const emails = await storage.getEmails(userId, "all", undefined, undefined, 20);
     const contextString = this.buildContext(emails);
+    this.enforceMaxSize();
     this.cache.set(userId, {
       contextString,
       emailCount: emails.length,
@@ -34,8 +60,9 @@ class EmailContextIndex {
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       return { context: cached.contextString, count: cached.emailCount };
     }
-    const emails = await storage.getEmails(userId, "all");
+    const emails = await storage.getEmails(userId, "all", undefined, undefined, 20);
     const contextString = this.buildContext(emails);
+    this.enforceMaxSize();
     this.cache.set(userId, {
       contextString,
       emailCount: emails.length,

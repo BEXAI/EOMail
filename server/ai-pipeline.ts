@@ -1,7 +1,10 @@
 import { storage } from "./storage";
 import { summarizeEmail, classifyEmail, draftReply, analyzeSpamRisk } from "./ai";
 import { emailContextIndex } from "./ai-context";
+import pLimit from "p-limit";
 import type { Email } from "@shared/schema";
+
+const MAX_BATCH_SIZE = 50;
 
 function getAgentName(category: string): string {
   switch (category) {
@@ -110,10 +113,14 @@ export async function processAllUnprocessed(userId: string, userDisplayName: str
   const unprocessed = await storage.getUnprocessedEmails(userId);
   if (unprocessed.length === 0) return 0;
 
-  let processed = 0;
-  for (const email of unprocessed) {
-    await processEmail(email.id, userId, userDisplayName, email);
-    processed++;
-  }
-  return processed;
+  const batch = unprocessed.slice(0, MAX_BATCH_SIZE);
+  const limit = pLimit(3);
+
+  const results = await Promise.allSettled(
+    batch.map((email) =>
+      limit(() => processEmail(email.id, userId, userDisplayName, email))
+    )
+  );
+
+  return results.filter((r) => r.status === "fulfilled").length;
 }

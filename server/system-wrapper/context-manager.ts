@@ -32,6 +32,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   formality_level: 3,
 };
 
+const MAX_PREFERENCE_STORE_SIZE = 5000;
 const preferenceStore = new Map<string, UserPreferences>();
 
 export function getUserPreferences(userId: string): UserPreferences {
@@ -44,6 +45,11 @@ export function setUserPreferences(
 ): UserPreferences {
   const existing = getUserPreferences(userId);
   const updated = { ...existing, ...prefs };
+  // Evict oldest entry if at capacity
+  if (!preferenceStore.has(userId) && preferenceStore.size >= MAX_PREFERENCE_STORE_SIZE) {
+    const firstKey = preferenceStore.keys().next().value;
+    if (firstKey) preferenceStore.delete(firstKey);
+  }
   preferenceStore.set(userId, updated);
   return updated;
 }

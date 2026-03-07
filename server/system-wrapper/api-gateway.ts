@@ -3,10 +3,10 @@ import { sanitizeMessages, validateApiKey } from "./security";
 import type { PromptResult } from "./prompt-orchestrator";
 
 const MODELS = {
-  simple: "gpt-4o-mini",
-  complex: "gpt-4o",
-  fallback: "gpt-4o-mini",
-} as const;
+  simple: process.env.OPENAI_MODEL_SIMPLE || "gpt-4o-mini",
+  complex: process.env.OPENAI_MODEL_COMPLEX || "gpt-4o",
+  fallback: process.env.OPENAI_MODEL_SIMPLE || "gpt-4o-mini",
+};
 
 const RETRY_CONFIG = {
   max_retries: 3,
@@ -19,7 +19,7 @@ function createOpenAIClient(): OpenAI {
 
   if (!validateApiKey(apiKey)) {
     throw new Error(
-      "OPENAI_API_KEY is missing or invalid. Add it to Replit Secrets."
+      "OPENAI_API_KEY is missing or invalid. Set it as an environment variable."
     );
   }
 
@@ -45,10 +45,11 @@ function isRetryableError(error: unknown): boolean {
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`Request timed out after ${ms}ms`)), ms)
-  );
-  return Promise.race([promise, timeout]);
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Request timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 interface ApiCallOptions {

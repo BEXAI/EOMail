@@ -16,7 +16,11 @@ export const users = pgTable("users", {
   resetToken: text("reset_token"),
   resetTokenExpiry: timestamp("reset_token_expiry"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("users_reset_token_idx").on(table.resetToken),
+  index("users_verification_token_idx").on(table.verificationToken),
+  index("users_mailbox_address_idx").on(table.mailboxAddress),
+]);
 
 export const emails = pgTable("emails", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -50,6 +54,8 @@ export const emails = pgTable("emails", {
   index("emails_folder_idx").on(table.folder),
   index("emails_user_folder_idx").on(table.userId, table.folder),
   index("emails_timestamp_idx").on(table.timestamp),
+  index("emails_user_ai_processed_idx").on(table.userId, table.aiProcessed),
+  index("emails_user_starred_idx").on(table.userId, table.starred),
 ]);
 
 export const agentActivity = pgTable("agent_activity", {

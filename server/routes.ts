@@ -9,6 +9,7 @@ import { requireAuth } from "./auth";
 import { processEmail, processAllUnprocessed } from "./ai-pipeline";
 import { draftReply, generateBriefing, handleAiCommand, handleAiChat, classifyEmail, expandDraft, type ChatMessage } from "./ai";
 import { sendEmail } from "./email";
+import { getCache, setCache, invalidateCache } from "./cache";
 import { emailContextIndex } from "./ai-context";
 import { getUserPreferences, setUserPreferences } from "./system-wrapper/context-manager";
 
@@ -29,7 +30,7 @@ const apiLimiter = rateLimit({
 });
 
 const aiLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
+  windowMs: 2 * 60 * 60 * 1000, // 2 hours
   max: 50,
   message: { error: "AI request limit reached. Please try again later." },
   standardHeaders: true,
@@ -72,7 +73,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const folder = (req.query.folder as string) || "inbox";
       const search = req.query.search as string | undefined;
       const label = req.query.label as string | undefined;
-      const emails = await storage.getEmails(userId, folder, search, label);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
+      const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+      const offset = (page - 1) * limit;
+      const emails = await storage.getEmails(userId, folder, search, label, limit, offset);
       res.json(emails);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch emails" });
@@ -131,6 +135,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const email = await storage.createEmail(parsed.data);
       emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
       res.status(201).json(email);
     } catch (e) {
       res.status(500).json({ error: "Failed to create email" });
@@ -145,6 +150,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const updated = await storage.updateEmail(req.params.id, userId, parsed.data);
       if (!updated) return res.status(404).json({ error: "Email not found" });
       emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: "Failed to update email" });
@@ -160,11 +166,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (action === "delete") {
         const count = await storage.deleteEmails(ids, userId);
         emailContextIndex.invalidate(userId);
+        invalidateCache(`briefing:${userId}`);
         return res.json({ deleted: count });
       }
       if (action === "update" && updates) {
-        const results = await storage.updateEmails(ids, userId, updates);
+        const results = await storage.updateEmails(ids.map(id => ({ id, values: updates })), userId);
         emailContextIndex.invalidate(userId);
+        invalidateCache(`briefing:${userId}`);
         return res.json(results);
       }
       res.status(400).json({ error: "Invalid action" });
@@ -179,6 +187,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const deleted = await storage.deleteEmail(req.params.id, userId);
       if (!deleted) return res.status(404).json({ error: "Email not found" });
       emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
       res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: "Failed to delete email" });
@@ -191,6 +200,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userDisplayName = req.user!.displayName;
       const result = await processEmail(req.params.id, userId, userDisplayName);
       if (!result) return res.status(404).json({ error: "Email not found" });
+      invalidateCache(`briefing:${userId}`);
       res.json(result);
     } catch (e) {
       console.error("AI process error:", e);
@@ -203,6 +213,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = req.user!.id;
       const userDisplayName = req.user!.displayName;
       const count = await processAllUnprocessed(userId, userDisplayName);
+      invalidateCache(`briefing:${userId}`);
       res.json({ processed: count });
     } catch (e) {
       console.error("AI process-all error:", e);
@@ -218,6 +229,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const tone = req.body?.tone as string | undefined;
       const draft = await draftReply(email, req.user!.displayName, tone, userId);
       const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: draft });
+      invalidateCache(`briefing:${userId}`);
       res.json(updated);
     } catch (e) {
       console.error("AI draft-reply error:", e);
@@ -228,6 +240,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/ai/briefing", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
+      const cacheKey = `briefing:${userId}`;
+      const cached = getCache<{ briefing: string, agentStats: any[] }>(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
       const emailContext = await emailContextIndex.getContext(userId);
       const activities = await storage.getAgentActivity(userId);
 
@@ -252,7 +270,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         pending: c.pending,
       }));
 
-      res.json({ briefing, agentStats });
+      const result = { briefing, agentStats };
+      setCache(cacheKey, result, 5 * 60 * 1000); // 5 minute cache
+
+      res.json(result);
     } catch (e) {
       console.error("AI briefing error:", e);
       res.status(500).json({ error: "Failed to generate briefing" });
@@ -355,6 +376,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: null });
       emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
       res.json({ success: true, email: updated });
     } catch (e) {
       console.error("AI approve error:", e);
@@ -445,32 +467,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
 
       const folderStats: Record<string, number> = {};
-      let organized = 0;
+      const emailsToCreate: InsertEmail[] = [];
+      const emailUpdates: { id: string, updates: { aiCategory: string, aiUrgency: string, aiSuggestedAction: string, aiProcessed: boolean } }[] = [];
 
-      const allCustomEmails = await Promise.all(
-        Object.values(categoryMap).map((name) =>
-          storage.getEmails(userId, `custom:${name}`)
-        )
-      );
-      const existingCopies = new Set<string>();
-      for (const emailList of allCustomEmails) {
-        for (const e of emailList) {
-          existingCopies.add(`${e.subject}|${e.fromEmail}|${e.timestamp.toISOString()}`);
-        }
-      }
+      const emailSignatures = inboxEmails.map(e => `${e.subject}|${e.fromEmail}|${e.timestamp.toISOString()}`);
+      const existingCopies = await storage.findDuplicateEmails(userId, emailSignatures);
 
       for (const email of inboxEmails) {
-        let category = email.aiCategory;
+        const dedupKey = `${email.subject}|${email.fromEmail}|${email.timestamp.toISOString()}`;
+        if (existingCopies.has(dedupKey)) {
+          continue;
+        }
 
+        let category = email.aiCategory;
         if (!category) {
           try {
             const classification = await classifyEmail(email.from, email.subject, email.body);
             category = classification.category;
-            await storage.updateEmail(email.id, userId, {
-              aiCategory: category,
-              aiUrgency: classification.urgency,
-              aiSuggestedAction: classification.suggestedAction,
-              aiProcessed: true,
+            emailUpdates.push({
+              id: email.id,
+              updates: {
+                aiCategory: category,
+                aiUrgency: classification.urgency,
+                aiSuggestedAction: classification.suggestedAction,
+                aiProcessed: true,
+              }
             });
           } catch {
             category = "notification";
@@ -479,11 +500,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
         const folderName = categoryMap[category] || "Other";
         const customFolderKey = `custom:${folderName}`;
-
-        const dedupKey = `${email.subject}|${email.fromEmail}|${email.timestamp.toISOString()}`;
-        if (existingCopies.has(dedupKey)) {
-          continue;
-        }
 
         let existingFolder = await storage.getCustomFolderByName(userId, folderName, null);
         if (!existingFolder) {
@@ -505,38 +521,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
         }
 
-        await storage.createEmail({
-          userId,
-          from: email.from,
-          fromEmail: email.fromEmail,
-          to: email.to,
-          toEmail: email.toEmail,
-          cc: email.cc,
-          bcc: email.bcc,
-          subject: email.subject,
-          body: email.body,
-          preview: email.preview,
-          timestamp: email.timestamp,
-          read: email.read,
-          starred: email.starred,
+        emailsToCreate.push({
+          ...email,
+          id: undefined, // let the db generate it
           folder: customFolderKey,
-          labels: email.labels,
-          attachments: email.attachments,
-          aiSummary: email.aiSummary,
           aiCategory: email.aiCategory || category,
-          aiUrgency: email.aiUrgency,
-          aiSuggestedAction: email.aiSuggestedAction,
-          aiDraftReply: email.aiDraftReply,
-          aiSpamScore: email.aiSpamScore,
-          aiSpamReason: email.aiSpamReason,
-          aiProcessed: true,
-        } as InsertEmail);
+        });
 
-        existingCopies.add(dedupKey);
         folderStats[folderName] = (folderStats[folderName] || 0) + 1;
-        organized++;
+      }
+      
+      if (emailsToCreate.length > 0) {
+        await storage.createEmails(emailsToCreate);
       }
 
+      if (emailUpdates.length > 0) {
+        await storage.updateEmails(emailUpdates.map(u => ({ id: u.id, values: u.updates })), userId);
+      }
+
+      const organized = emailsToCreate.length;
       const folderSummary = Object.entries(folderStats)
         .map(([name, count]) => `${name}: ${count}`)
         .join(", ");
@@ -547,6 +550,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
       const createdFolders = await storage.getCustomFolders(userId);
       res.json({ success: true, organized, folders: createdFolders, stats: folderStats });
     } catch (e) {
@@ -558,26 +562,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/ai/reject/:id", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
-      const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: null });
+
+      const paramsSchema = z.object({ id: z.string().min(1) });
+      const parsed = paramsSchema.safeParse(req.params);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid email ID" });
+      }
+
+      const updated = await storage.updateEmail(parsed.data.id, userId, { aiDraftReply: null });
       if (!updated) return res.status(404).json({ error: "Email not found" });
       emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: "Failed to reject draft" });
     }
   });
 
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok" });
+  });
+
   app.post("/api/email/inbound", async (req, res) => {
     try {
       const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
-      if (webhookSecret) {
-        const providedSecret = String(req.headers["x-webhook-secret"] || req.query.secret || "");
-        if (
-          providedSecret.length !== webhookSecret.length ||
-          !crypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(webhookSecret))
-        ) {
-          return res.status(401).json({ error: "Unauthorized webhook request" });
-        }
+      if (!webhookSecret) {
+        return res.status(503).json({ error: "Webhook not configured" });
+      }
+      const providedSecret = String(req.headers["x-webhook-secret"] || req.query.secret || "");
+      if (
+        providedSecret.length !== webhookSecret.length ||
+        !crypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(webhookSecret))
+      ) {
+        return res.status(401).json({ error: "Unauthorized webhook request" });
       }
 
       const { from, from_email, to, subject, html, text: textBody } = req.body;
@@ -619,6 +636,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
 
         emailContextIndex.invalidate(user.id);
+        invalidateCache(`briefing:${user.id}`);
         processEmail(email.id, user.id).catch((e) =>
           console.error("AI triage failed for inbound email:", e)
         );

@@ -105,7 +105,7 @@ export default function ResetPasswordPage() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder="At least 12 characters"
                     required
                     autoFocus
                     data-testid="input-reset-password"

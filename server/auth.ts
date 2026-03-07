@@ -27,9 +27,31 @@ declare global {
 
 const LOGIN_ATTEMPT_WINDOW = 15 * 60 * 1000; // 15 minutes
 const MAX_LOGIN_ATTEMPTS = 5;
+const MAX_LOGIN_ATTEMPTS_MAP_SIZE = 10000;
 const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
 
+// Periodic cleanup to prevent unbounded Map growth
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of loginAttempts) {
+    if (now - record.firstAttempt > LOGIN_ATTEMPT_WINDOW) {
+      loginAttempts.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
+function purgeExpiredIfFull(): void {
+  if (loginAttempts.size < MAX_LOGIN_ATTEMPTS_MAP_SIZE) return;
+  const now = Date.now();
+  for (const [key, record] of loginAttempts) {
+    if (now - record.firstAttempt > LOGIN_ATTEMPT_WINDOW) {
+      loginAttempts.delete(key);
+    }
+  }
+}
+
 function recordFailedLogin(username: string): boolean {
+  purgeExpiredIfFull();
   const now = Date.now();
   const record = loginAttempts.get(username);
   if (!record || now - record.firstAttempt > LOGIN_ATTEMPT_WINDOW) {
@@ -239,7 +261,7 @@ export function setupAuth(app: Express) {
     try {
       const { token, password } = req.body;
       if (!token || !password) return res.status(400).json({ message: "Token and password are required" });
-      if (password.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
+      if (password.length < 12) return res.status(400).json({ message: "Password must be at least 12 characters" });
 
       const user = await storage.getUserByResetToken(token);
       if (!user || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {

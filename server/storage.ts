@@ -14,14 +14,16 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
 
-  getEmails(userId: string, folder: string, search?: string, label?: string): Promise<Email[]>;
+  getEmails(userId: string, folder: string, search?: string, label?: string, limit?: number, offset?: number): Promise<Email[]>;
   getEmail(id: string, userId: string): Promise<Email | undefined>;
   createEmail(email: InsertEmail): Promise<Email>;
   updateEmail(id: string, userId: string, updates: EmailUpdates): Promise<Email | undefined>;
-  updateEmails(ids: string[], userId: string, updates: EmailUpdates): Promise<Email[]>;
+  updateEmails(updates: { id: string, values: EmailUpdates }[], userId: string): Promise<Email[]>;
   deleteEmail(id: string, userId: string): Promise<boolean>;
   deleteEmails(ids: string[], userId: string): Promise<number>;
   getEmailCounts(userId: string): Promise<Record<string, number>>;
+  findDuplicateEmails(userId: string, signatures: string[]): Promise<Set<string>>;
+  createEmails(emails: InsertEmail[]): Promise<Email[]>;
 
 
   getUnprocessedEmails(userId: string): Promise<Email[]>;
@@ -100,7 +102,7 @@ export class DatabaseStorage implements IStorage {
     return conditions;
   }
 
-  async getEmails(userId: string, folder: string, search?: string, label?: string): Promise<Email[]> {
+  async getEmails(userId: string, folder: string, search?: string, label?: string, limit: number = 50, offset: number = 0): Promise<Email[]> {
     const conditions = this.buildFolderConditions(userId, folder);
 
     if (label) {
@@ -122,7 +124,9 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(emails)
       .where(and(...conditions))
-      .orderBy(desc(emails.timestamp));
+      .orderBy(desc(emails.timestamp))
+      .limit(limit)
+      .offset(offset);
   }
 
   async getEmail(id: string, userId: string): Promise<Email | undefined> {
@@ -148,11 +152,29 @@ export class DatabaseStorage implements IStorage {
     return email;
   }
 
-  async updateEmails(ids: string[], userId: string, updates: EmailUpdates): Promise<Email[]> {
-    if (ids.length === 0) return [];
+  async updateEmails(updates: { id: string, values: EmailUpdates }[], userId: string): Promise<Email[]> {
+    if (updates.length === 0) return [];
+
+    const ids = updates.map(u => u.id);
+    const allKeys = new Set(updates.flatMap(u => Object.keys(u.values)));
+
+    const caseStatements: Record<string, any> = { id: emails.id };
+
+    for (const key of allKeys) {
+      const col = emails[key as keyof typeof emails];
+      let statement = sql.raw(`case ${emails.id}`);
+      for (const { id, values } of updates) {
+        if (key in values) {
+          statement = statement.append(sql` when ${id} then ${values[key as keyof EmailUpdates]}`);
+        }
+      }
+      statement = statement.append(sql` else ${col} end`);
+      caseStatements[key] = statement;
+    }
+
     return db
       .update(emails)
-      .set(updates)
+      .set(caseStatements)
       .where(and(inArray(emails.id, ids), eq(emails.userId, userId)))
       .returning();
   }
@@ -175,41 +197,39 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEmailCounts(userId: string): Promise<Record<string, number>> {
-    const rows = await db
+    const countsQuery = db
       .select({
-        folder: emails.folder,
-        read: emails.read,
-        starred: emails.starred,
-        hasDraft: sql<boolean>`${emails.aiDraftReply} IS NOT NULL`,
+        inbox: sql<number>`count(*) filter (where folder = 'inbox' and read = false)`.as("inbox"),
+        starred: sql<number>`count(*) filter (where starred = true and folder != 'trash')`.as("starred"),
+        sent: sql<number>`count(*) filter (where folder = 'sent')`.as("sent"),
+        drafts: sql<number>`count(*) filter (where folder = 'drafts')`.as("drafts"),
+        archive: sql<number>`count(*) filter (where folder = 'archive')`.as("archive"),
+        spam: sql<number>`count(*) filter (where folder = 'spam')`.as("spam"),
+        trash: sql<number>`count(*) filter (where folder = 'trash')`.as("trash"),
+        all: sql<number>`count(*) filter (where folder != 'trash' and folder != 'spam' and folder != 'archive' and not folder like 'custom:%')`.as("all"),
+        "pending-approvals": sql<number>`count(*) filter (where ${emails.aiDraftReply} IS NOT NULL and folder != 'sent' and folder != 'trash')`.as("pending-approvals"),
       })
       .from(emails)
       .where(eq(emails.userId, userId));
 
-    const counts: Record<string, number> = {
-      inbox: 0,
-      starred: 0,
-      sent: 0,
-      drafts: 0,
-      archive: 0,
-      spam: 0,
-      trash: 0,
-      all: 0,
-      "pending-approvals": 0,
-    };
+    const customFoldersQuery = db
+      .select({
+        folder: emails.folder,
+        count: sql<number>`count(*)`.as("count"),
+      })
+      .from(emails)
+      .where(and(eq(emails.userId, userId), like(emails.folder, "custom:%")))
+      .groupBy(emails.folder);
 
-    for (const row of rows) {
-      if (row.folder === "inbox" && !row.read) counts.inbox++;
-      if (row.starred && row.folder !== "trash") counts.starred++;
-      if (row.folder === "sent") counts.sent++;
-      if (row.folder === "drafts") counts.drafts++;
-      if (row.folder === "archive") counts.archive++;
-      if (row.folder === "spam") counts.spam++;
-      if (row.folder === "trash") counts.trash++;
-      if (row.folder !== "trash" && row.folder !== "spam" && row.folder !== "archive") counts.all++;
-      if (row.hasDraft && row.folder !== "sent" && row.folder !== "trash") counts["pending-approvals"]++;
-      if (row.folder.startsWith("custom:")) {
-        counts[row.folder] = (counts[row.folder] || 0) + 1;
-      }
+    const [mainCountsResult, customFolderCounts] = await Promise.all([
+      countsQuery,
+      customFoldersQuery,
+    ]);
+
+    const counts = mainCountsResult[0] as Record<string, number>;
+
+    for (const row of customFolderCounts) {
+      counts[row.folder] = Number(row.count);
     }
 
     return counts;
@@ -290,6 +310,26 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(customFolders.id, id), eq(customFolders.userId, userId)))
       .returning();
     return result.length > 0;
+  }
+
+  async findDuplicateEmails(userId: string, signatures: string[]): Promise<Set<string>> {
+    if (signatures.length === 0) return new Set();
+
+    const rows = await db
+      .select({ signature: sql<string>`${emails.subject} || '|' || ${emails.fromEmail} || '|' || ${emails.timestamp}` })
+      .from(emails)
+      .where(and(
+        eq(emails.userId, userId),
+        like(emails.folder, "custom:%"),
+        inArray(sql<string>`${emails.subject} || '|' || ${emails.fromEmail} || '|' || ${emails.timestamp}`, signatures)
+      ));
+
+    return new Set(rows.map(r => r.signature));
+  }
+
+  async createEmails(emailsToInsert: InsertEmail[]): Promise<Email[]> {
+    if (emailsToInsert.length === 0) return [];
+    return db.insert(emails).values(emailsToInsert).returning();
   }
 }
 

@@ -3,6 +3,10 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 const DOMAIN = process.env.DOMAIN || "eomail.co";
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 export async function sendEmail(opts: {
   from: string;
   fromEmail: string;
@@ -48,7 +52,7 @@ export async function sendPasswordResetEmail(to: string, token: string, displayN
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
         <h2 style="margin-bottom: 16px;">Reset your password</h2>
-        <p>Hi ${displayName},</p>
+        <p>Hi ${escapeHtml(displayName)},</p>
         <p>We received a request to reset the password for your EOMail account. Click the button below to set a new password:</p>
         <a href="${resetUrl}" style="display: inline-block; background: #0f172a; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 16px 0;">Reset Password</a>
         <p style="color: #64748b; font-size: 13px;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
@@ -70,7 +74,7 @@ export async function sendVerificationEmail(to: string, token: string, displayNa
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
         <h2 style="margin-bottom: 16px;">Welcome to EOMail!</h2>
-        <p>Hi ${displayName},</p>
+        <p>Hi ${escapeHtml(displayName)},</p>
         <p>Thanks for signing up. Please verify your email address to activate your account:</p>
         <a href="${verifyUrl}" style="display: inline-block; background: #0f172a; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 16px 0;">Verify Email</a>
         <p style="color: #64748b; font-size: 13px;">If you didn't create an account, you can safely ignore this email.</p>
