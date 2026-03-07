@@ -35,7 +35,7 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
 
     const agentName = getAgentName(classification.category);
 
-    await storage.updateAgentActivity(gatekeeperActivity.id, {
+    await storage.updateAgentActivity(gatekeeperActivity.id, userId, {
       status: "complete",
       detail: spamAnalysis.score > 70
         ? `Threat detected: ${spamAnalysis.threatType} (${spamAnalysis.score}% risk)`
@@ -82,7 +82,7 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
     if (classification.category === "finance") detailParts.push("financial data extracted");
     if (classification.category === "scheduling") detailParts.push("calendar event detected");
 
-    await storage.updateAgentActivity(classifyActivity.id, {
+    await storage.updateAgentActivity(classifyActivity.id, userId, {
       status: "complete",
       detail: detailParts.join(" — "),
     });
@@ -90,7 +90,7 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
     return updated || email;
   } catch (error) {
     console.error(`AI processing failed for email ${emailId}:`, error);
-    await storage.updateAgentActivity(gatekeeperActivity.id, {
+    await storage.updateAgentActivity(gatekeeperActivity.id, userId, {
       status: "error",
       detail: error instanceof Error ? error.message : "Unknown error",
     });

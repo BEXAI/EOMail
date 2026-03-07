@@ -23,7 +23,7 @@ export interface IStorage {
 
   getAgentActivity(userId: string): Promise<AgentActivity[]>;
   createAgentActivity(data: InsertAgentActivity): Promise<AgentActivity>;
-  updateAgentActivity(id: string, updates: Partial<AgentActivity>): Promise<AgentActivity | undefined>;
+  updateAgentActivity(id: string, userId: string, updates: Partial<AgentActivity>): Promise<AgentActivity | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -194,12 +194,12 @@ export class DatabaseStorage implements IStorage {
     return activity;
   }
 
-  async updateAgentActivity(id: string, updates: Partial<AgentActivity>): Promise<AgentActivity | undefined> {
+  async updateAgentActivity(id: string, userId: string, updates: Partial<AgentActivity>): Promise<AgentActivity | undefined> {
     const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
     const [activity] = await db
       .update(agentActivity)
       .set(safeUpdates)
-      .where(eq(agentActivity.id, id))
+      .where(and(eq(agentActivity.id, id), eq(agentActivity.userId, userId)))
       .returning();
     return activity;
   }
