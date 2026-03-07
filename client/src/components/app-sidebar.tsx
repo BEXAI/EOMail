@@ -32,6 +32,9 @@ interface SidebarProps {
   onFolderChange: (folder: string) => void;
   activeLabel: string | null;
   onLabelFilter: (label: string | null) => void;
+  userName?: string;
+  userEmail?: string;
+  userInitials?: string;
 }
 
 const folders = [
@@ -51,7 +54,7 @@ const labels = [
   { id: "important", label: "Important", color: "bg-rose-500" },
 ];
 
-export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, activeLabel, onLabelFilter }: SidebarProps) {
+export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, activeLabel, onLabelFilter, userName, userEmail, userInitials }: SidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader className="px-3 pt-4 pb-2">
@@ -149,11 +152,11 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
       <SidebarFooter className="px-3 pb-4 pt-2 border-t border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-2 rounded-full hover-elevate cursor-pointer">
           <Avatar className="w-8 h-8 shrink-0">
-            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">ME</AvatarFallback>
+            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">{userInitials || "ME"}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col min-w-0 flex-1">
-            <span className="text-sm font-medium text-sidebar-foreground truncate">My Account</span>
-            <span className="text-xs text-muted-foreground truncate">me@aimail.com</span>
+            <span className="text-sm font-medium text-sidebar-foreground truncate">{userName || "My Account"}</span>
+            <span className="text-xs text-muted-foreground truncate">{userEmail || "me@aimail.com"}</span>
           </div>
           <Settings className="w-4 h-4 text-muted-foreground shrink-0" />
         </div>

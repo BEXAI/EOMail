@@ -1,39 +1,154 @@
-import { type User, type InsertUser, type Email, type InsertEmail } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { type User, type InsertUser, type Email, type InsertEmail, users, emails } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, or, ilike, desc, inArray, ne, sql } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
-  getEmails(folder: string, search?: string, label?: string): Promise<Email[]>;
-  getEmail(id: string): Promise<Email | undefined>;
+  getEmails(userId: string, folder: string, search?: string, label?: string): Promise<Email[]>;
+  getEmail(id: string, userId: string): Promise<Email | undefined>;
   createEmail(email: InsertEmail): Promise<Email>;
-  updateEmail(id: string, updates: Partial<Email>): Promise<Email | undefined>;
-  updateEmails(ids: string[], updates: Partial<Email>): Promise<Email[]>;
-  deleteEmail(id: string): Promise<boolean>;
-  deleteEmails(ids: string[]): Promise<number>;
-  getEmailCounts(): Promise<Record<string, number>>;
+  updateEmail(id: string, userId: string, updates: Partial<Email>): Promise<Email | undefined>;
+  updateEmails(ids: string[], userId: string, updates: Partial<Email>): Promise<Email[]>;
+  deleteEmail(id: string, userId: string): Promise<boolean>;
+  deleteEmails(ids: string[], userId: string): Promise<number>;
+  getEmailCounts(userId: string): Promise<Record<string, number>>;
+  seedEmailsForUser(userId: string): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-  private emails: Map<string, Email>;
-
-  constructor() {
-    this.users = new Map();
-    this.emails = new Map();
-    this.seedData();
+export class DatabaseStorage implements IStorage {
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return user;
   }
 
-  private seedData() {
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async getEmails(userId: string, folder: string, search?: string, label?: string): Promise<Email[]> {
+    const conditions = [eq(emails.userId, userId)];
+
+    if (folder === "starred") {
+      conditions.push(eq(emails.starred, true));
+      conditions.push(ne(emails.folder, "trash"));
+    } else if (folder === "all") {
+      conditions.push(ne(emails.folder, "trash"));
+      conditions.push(ne(emails.folder, "spam"));
+    } else {
+      conditions.push(eq(emails.folder, folder));
+    }
+
+    if (label) {
+      conditions.push(sql`${label} = ANY(${emails.labels})`);
+    }
+
+    if (search) {
+      conditions.push(
+        or(
+          ilike(emails.subject, `%${search}%`),
+          ilike(emails.from, `%${search}%`),
+          ilike(emails.preview, `%${search}%`),
+          ilike(emails.body, `%${search}%`)
+        )!
+      );
+    }
+
+    return db
+      .select()
+      .from(emails)
+      .where(and(...conditions))
+      .orderBy(desc(emails.timestamp));
+  }
+
+  async getEmail(id: string, userId: string): Promise<Email | undefined> {
+    const [email] = await db
+      .select()
+      .from(emails)
+      .where(and(eq(emails.id, id), eq(emails.userId, userId)))
+      .limit(1);
+    return email;
+  }
+
+  async createEmail(insertEmail: InsertEmail): Promise<Email> {
+    const [email] = await db.insert(emails).values(insertEmail).returning();
+    return email;
+  }
+
+  async updateEmail(id: string, userId: string, updates: Partial<Email>): Promise<Email | undefined> {
+    const { id: _id, userId: _uid, createdAt: _ca, ...safeUpdates } = updates as any;
+    const [email] = await db
+      .update(emails)
+      .set(safeUpdates)
+      .where(and(eq(emails.id, id), eq(emails.userId, userId)))
+      .returning();
+    return email;
+  }
+
+  async updateEmails(ids: string[], userId: string, updates: Partial<Email>): Promise<Email[]> {
+    if (ids.length === 0) return [];
+    const { id: _id, userId: _uid, createdAt: _ca, ...safeUpdates } = updates as any;
+    return db
+      .update(emails)
+      .set(safeUpdates)
+      .where(and(inArray(emails.id, ids), eq(emails.userId, userId)))
+      .returning();
+  }
+
+  async deleteEmail(id: string, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(emails)
+      .where(and(eq(emails.id, id), eq(emails.userId, userId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  async deleteEmails(ids: string[], userId: string): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await db
+      .delete(emails)
+      .where(and(inArray(emails.id, ids), eq(emails.userId, userId)))
+      .returning();
+    return result.length;
+  }
+
+  async getEmailCounts(userId: string): Promise<Record<string, number>> {
+    const allEmails = await db
+      .select({
+        folder: emails.folder,
+        read: emails.read,
+        starred: emails.starred,
+      })
+      .from(emails)
+      .where(eq(emails.userId, userId));
+
+    return {
+      inbox: allEmails.filter((e) => e.folder === "inbox" && !e.read).length,
+      starred: allEmails.filter((e) => e.starred && e.folder !== "trash").length,
+      sent: allEmails.filter((e) => e.folder === "sent").length,
+      drafts: allEmails.filter((e) => e.folder === "drafts").length,
+      spam: allEmails.filter((e) => e.folder === "spam").length,
+      trash: allEmails.filter((e) => e.folder === "trash").length,
+      all: allEmails.filter((e) => e.folder !== "trash" && e.folder !== "spam").length,
+    };
+  }
+
+  async seedEmailsForUser(userId: string): Promise<void> {
     const now = new Date();
     const hour = (h: number) => new Date(now.getTime() - h * 60 * 60 * 1000);
     const day = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
 
-    const seedEmails: Email[] = [
+    const seedEmails: InsertEmail[] = [
       {
-        id: randomUUID(),
+        userId,
         from: "Google AI Team",
         fromEmail: "ai-team@google.com",
         to: "You",
@@ -49,7 +164,7 @@ export class MemStorage implements IStorage {
         attachments: 0,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "Sarah Johnson",
         fromEmail: "sarah.johnson@techcorp.io",
         to: "You",
@@ -65,7 +180,7 @@ export class MemStorage implements IStorage {
         attachments: 2,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "GitHub",
         fromEmail: "noreply@github.com",
         to: "You",
@@ -81,7 +196,7 @@ export class MemStorage implements IStorage {
         attachments: 0,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "Marcus Chen",
         fromEmail: "m.chen@designstudio.co",
         to: "You",
@@ -97,7 +212,7 @@ export class MemStorage implements IStorage {
         attachments: 1,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "Stripe",
         fromEmail: "receipts@stripe.com",
         to: "You",
@@ -113,7 +228,7 @@ export class MemStorage implements IStorage {
         attachments: 1,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "Priya Patel",
         fromEmail: "priya@venturelab.vc",
         to: "You",
@@ -129,7 +244,7 @@ export class MemStorage implements IStorage {
         attachments: 0,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "Netflix",
         fromEmail: "info@mailer.netflix.com",
         to: "You",
@@ -145,7 +260,7 @@ export class MemStorage implements IStorage {
         attachments: 0,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "You",
         fromEmail: "me@aimail.com",
         to: "Sarah Johnson",
@@ -161,7 +276,7 @@ export class MemStorage implements IStorage {
         attachments: 0,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "You",
         fromEmail: "me@aimail.com",
         to: "Marcus Chen",
@@ -177,7 +292,7 @@ export class MemStorage implements IStorage {
         attachments: 0,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "You",
         fromEmail: "me@aimail.com",
         to: "Team",
@@ -193,7 +308,7 @@ export class MemStorage implements IStorage {
         attachments: 0,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "Nigerian Prince Foundation",
         fromEmail: "prince@totallylegit-money.biz",
         to: "You",
@@ -209,7 +324,7 @@ export class MemStorage implements IStorage {
         attachments: 0,
       },
       {
-        id: randomUUID(),
+        userId,
         from: "Old Newsletter",
         fromEmail: "noreply@somenewsletter.com",
         to: "You",
@@ -226,103 +341,8 @@ export class MemStorage implements IStorage {
       },
     ];
 
-    for (const email of seedEmails) {
-      this.emails.set(email.id, email);
-    }
-  }
-
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find((u) => u.username === username);
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
-  }
-
-  async getEmails(folder: string, search?: string, label?: string): Promise<Email[]> {
-    let result = Array.from(this.emails.values()).filter((e) => {
-      if (folder === "starred") return e.starred && e.folder !== "trash";
-      if (folder === "all") return e.folder !== "trash" && e.folder !== "spam";
-      return e.folder === folder;
-    });
-
-    if (label) {
-      result = result.filter((e) => e.labels.includes(label));
-    }
-
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (e) =>
-          e.subject.toLowerCase().includes(q) ||
-          e.from.toLowerCase().includes(q) ||
-          e.preview.toLowerCase().includes(q) ||
-          e.body.toLowerCase().includes(q)
-      );
-    }
-
-    return result.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }
-
-  async getEmail(id: string): Promise<Email | undefined> {
-    return this.emails.get(id);
-  }
-
-  async createEmail(insertEmail: InsertEmail): Promise<Email> {
-    const id = randomUUID();
-    const email: Email = { ...insertEmail, id } as Email;
-    this.emails.set(id, email);
-    return email;
-  }
-
-  async updateEmail(id: string, updates: Partial<Email>): Promise<Email | undefined> {
-    const email = this.emails.get(id);
-    if (!email) return undefined;
-    const updated = { ...email, ...updates };
-    this.emails.set(id, updated);
-    return updated;
-  }
-
-  async updateEmails(ids: string[], updates: Partial<Email>): Promise<Email[]> {
-    const results: Email[] = [];
-    for (const id of ids) {
-      const updated = await this.updateEmail(id, updates);
-      if (updated) results.push(updated);
-    }
-    return results;
-  }
-
-  async deleteEmail(id: string): Promise<boolean> {
-    return this.emails.delete(id);
-  }
-
-  async deleteEmails(ids: string[]): Promise<number> {
-    let count = 0;
-    for (const id of ids) {
-      if (this.emails.delete(id)) count++;
-    }
-    return count;
-  }
-
-  async getEmailCounts(): Promise<Record<string, number>> {
-    const emails = Array.from(this.emails.values());
-    return {
-      inbox: emails.filter((e) => e.folder === "inbox" && !e.read).length,
-      starred: emails.filter((e) => e.starred && e.folder !== "trash").length,
-      sent: emails.filter((e) => e.folder === "sent").length,
-      drafts: emails.filter((e) => e.folder === "drafts").length,
-      spam: emails.filter((e) => e.folder === "spam").length,
-      trash: emails.filter((e) => e.folder === "trash").length,
-      all: emails.filter((e) => e.folder !== "trash" && e.folder !== "spam").length,
-    };
+    await db.insert(emails).values(seedEmails);
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

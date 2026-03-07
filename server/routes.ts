@@ -1,34 +1,37 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
+import { type Server } from "http";
 import { storage } from "./storage";
 import { insertEmailSchema } from "@shared/schema";
-import { z } from "zod";
+import { requireAuth } from "./auth";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  app.get("/api/emails", async (req, res) => {
+  app.get("/api/emails", requireAuth, async (req, res) => {
     try {
+      const userId = req.user!.id;
       const folder = (req.query.folder as string) || "inbox";
       const search = req.query.search as string | undefined;
       const label = req.query.label as string | undefined;
-      const emails = await storage.getEmails(folder, search, label);
+      const emails = await storage.getEmails(userId, folder, search, label);
       res.json(emails);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch emails" });
     }
   });
 
-  app.get("/api/emails/counts", async (req, res) => {
+  app.get("/api/emails/counts", requireAuth, async (req, res) => {
     try {
-      const counts = await storage.getEmailCounts();
+      const userId = req.user!.id;
+      const counts = await storage.getEmailCounts(userId);
       res.json(counts);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch counts" });
     }
   });
 
-  app.get("/api/emails/:id", async (req, res) => {
+  app.get("/api/emails/:id", requireAuth, async (req, res) => {
     try {
-      const email = await storage.getEmail(req.params.id);
+      const userId = req.user!.id;
+      const email = await storage.getEmail(req.params.id, userId);
       if (!email) return res.status(404).json({ error: "Email not found" });
       res.json(email);
     } catch (e) {
@@ -36,9 +39,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/emails", async (req, res) => {
+  app.post("/api/emails", requireAuth, async (req, res) => {
     try {
-      const body = { ...req.body };
+      const userId = req.user!.id;
+      const body = { ...req.body, userId };
       if (typeof body.timestamp === "string") {
         body.timestamp = new Date(body.timestamp);
       }
@@ -51,9 +55,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.patch("/api/emails/:id", async (req, res) => {
+  app.patch("/api/emails/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateEmail(req.params.id, req.body);
+      const userId = req.user!.id;
+      const updated = await storage.updateEmail(req.params.id, userId, req.body);
       if (!updated) return res.status(404).json({ error: "Email not found" });
       res.json(updated);
     } catch (e) {
@@ -61,8 +66,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/emails/bulk", async (req, res) => {
+  app.post("/api/emails/bulk", requireAuth, async (req, res) => {
     try {
+      const userId = req.user!.id;
       const { ids, action, updates } = req.body as {
         ids: string[];
         action: "update" | "delete";
@@ -72,11 +78,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "ids and action required" });
       }
       if (action === "delete") {
-        const count = await storage.deleteEmails(ids);
+        const count = await storage.deleteEmails(ids, userId);
         return res.json({ deleted: count });
       }
       if (action === "update" && updates) {
-        const results = await storage.updateEmails(ids, updates);
+        const results = await storage.updateEmails(ids, userId, updates);
         return res.json(results);
       }
       res.status(400).json({ error: "Invalid action" });
@@ -85,9 +91,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.delete("/api/emails/:id", async (req, res) => {
+  app.delete("/api/emails/:id", requireAuth, async (req, res) => {
     try {
-      const deleted = await storage.deleteEmail(req.params.id);
+      const userId = req.user!.id;
+      const deleted = await storage.deleteEmail(req.params.id, userId);
       if (!deleted) return res.status(404).json({ error: "Email not found" });
       res.json({ success: true });
     } catch (e) {

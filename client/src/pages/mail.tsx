@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -79,6 +80,7 @@ export default function MailPage() {
   const [pendingSend, setPendingSend] = useState<ComposeData | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user, logoutMutation } = useAuth();
   const searchRef = useRef<HTMLInputElement>(null);
 
   const queryParams = new URLSearchParams({ folder });
@@ -88,7 +90,7 @@ export default function MailPage() {
   const { data: emails = [], isLoading: emailsLoading } = useQuery<Email[]>({
     queryKey: ["/api/emails", folder, search, labelFilter],
     queryFn: async () => {
-      const res = await fetch(`/api/emails?${queryParams}`);
+      const res = await fetch(`/api/emails?${queryParams}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch emails");
       return res.json();
     },
@@ -168,8 +170,8 @@ export default function MailPage() {
     mutationFn: async (data: ComposeData) => {
       const now = new Date();
       await apiRequest("POST", "/api/emails", {
-        from: "You",
-        fromEmail: "me@aimail.com",
+        from: user?.displayName || "You",
+        fromEmail: user?.email || "me@aimail.com",
         to: data.to.split("@")[0] || data.to,
         toEmail: data.to,
         cc: data.cc || "",
@@ -412,6 +414,9 @@ export default function MailPage() {
           onFolderChange={handleFolderChange}
           activeLabel={labelFilter}
           onLabelFilter={handleLabelFilter}
+          userName={user?.displayName}
+          userEmail={user?.email}
+          userInitials={user?.avatarInitials}
         />
 
         <SidebarInset className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -478,8 +483,10 @@ export default function MailPage() {
               <div
                 className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold cursor-pointer ml-1"
                 data-testid="avatar-user"
+                onClick={() => logoutMutation.mutate()}
+                title={`${user?.displayName} — Click to sign out`}
               >
-                ME
+                {user?.avatarInitials || "ME"}
               </div>
             </div>
           </header>
