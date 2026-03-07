@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+import { type AgentActivity } from "@shared/schema";
 import {
   Sidebar,
   SidebarContent,
@@ -12,16 +14,26 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Inbox,
   Star,
   Send,
-  FileText,
   AlertTriangle,
   Trash2,
   Plus,
   Tag,
   Settings,
   Mail,
+  Sparkles,
+  Bot,
+  Check,
+  X,
+  Loader2,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +53,7 @@ const folders = [
   { id: "inbox", label: "Inbox", icon: Inbox, countKey: "inbox" },
   { id: "starred", label: "Starred", icon: Star, countKey: "starred" },
   { id: "sent", label: "Sent", icon: Send, countKey: "sent" },
-  { id: "drafts", label: "Drafts", icon: FileText, countKey: "drafts" },
+  { id: "pending-approvals", label: "Pending Approvals", icon: Sparkles, countKey: "pending-approvals" },
   { id: "spam", label: "Spam", icon: AlertTriangle, countKey: "spam" },
   { id: "trash", label: "Trash", icon: Trash2, countKey: "trash" },
   { id: "all", label: "All Mail", icon: Mail, countKey: "all" },
@@ -53,6 +65,67 @@ const labels = [
   { id: "design", label: "Design", color: "bg-purple-500" },
   { id: "important", label: "Important", color: "bg-rose-500" },
 ];
+
+function ActiveAgentsSection() {
+  const { data: activities = [] } = useQuery<AgentActivity[]>({
+    queryKey: ["/api/ai/activity"],
+    refetchInterval: (query) => {
+      const data = query.state.data as AgentActivity[] | undefined;
+      if (data?.some((a) => a.status === "pending")) return 5000;
+      return false;
+    },
+  });
+
+  const recent = activities.slice(0, 5);
+  const pendingCount = activities.filter((a) => a.status === "pending").length;
+
+  if (recent.length === 0) return null;
+
+  return (
+    <SidebarGroup className="mt-2">
+      <Collapsible defaultOpen>
+        <CollapsibleTrigger className="flex items-center gap-1 px-3 mb-1 w-full group cursor-pointer">
+          <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex-1 text-left">
+            Active Agents
+          </span>
+          {pendingCount > 0 && (
+            <span className="text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 font-semibold">
+              {pendingCount}
+            </span>
+          )}
+          <ChevronDown className="w-3 h-3 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarGroupContent>
+            <div className="space-y-1 px-2">
+              {recent.map((activity) => (
+                <div
+                  key={activity.id}
+                  className="flex items-start gap-2 px-2 py-1.5 rounded-md text-xs"
+                  data-testid={`agent-activity-${activity.id}`}
+                >
+                  {activity.status === "pending" && (
+                    <Loader2 className="w-3 h-3 text-primary animate-spin shrink-0 mt-0.5" />
+                  )}
+                  {activity.status === "complete" && (
+                    <Check className="w-3 h-3 text-green-500 shrink-0 mt-0.5" />
+                  )}
+                  {activity.status === "error" && (
+                    <X className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
+                  )}
+                  <span className="text-muted-foreground leading-tight truncate">
+                    {activity.action}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </SidebarGroupContent>
+        </CollapsibleContent>
+      </Collapsible>
+    </SidebarGroup>
+  );
+}
 
 export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, activeLabel, onLabelFilter, userName, userEmail, userInitials }: SidebarProps) {
   return (
@@ -97,7 +170,7 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
                       )}
                       data-testid={`nav-folder-${folder.id}`}
                     >
-                      <Icon className="w-4 h-4 shrink-0" />
+                      <Icon className={cn("w-4 h-4 shrink-0", folder.id === "pending-approvals" && "text-primary")} />
                       <span className="flex-1">{folder.label}</span>
                       {count > 0 && (
                         <span
@@ -147,6 +220,8 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <ActiveAgentsSection />
       </SidebarContent>
 
       <SidebarFooter className="px-3 pb-4 pt-2 border-t border-sidebar-border">

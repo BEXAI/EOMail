@@ -14,6 +14,7 @@ import {
   FolderInput,
   Inbox,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -44,6 +45,21 @@ function highlightText(text: string, search: string): string {
   const regex = new RegExp(`(${search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
   return text.replace(regex, "<mark class='bg-yellow-200 dark:bg-yellow-800 rounded-sm'>$1</mark>");
 }
+
+const urgencyDotColors: Record<string, string> = {
+  high: "bg-red-500",
+  medium: "bg-yellow-500",
+  low: "bg-green-500",
+};
+
+const categoryColors: Record<string, string> = {
+  finance: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
+  scheduling: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
+  newsletter: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
+  "action-required": "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400",
+  social: "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-400",
+  notification: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400",
+};
 
 export function EmailList({
   emails,
@@ -178,6 +194,7 @@ export function EmailList({
           const isChecked = checkedIds.has(email.id);
           const initials = getInitials(email.from);
           const avatarColor = getSenderColor(email.from);
+          const previewText = email.aiSummary || email.preview;
 
           return (
             <div
@@ -221,6 +238,17 @@ export function EmailList({
                   <Star className={cn("w-4 h-4", email.starred && "fill-amber-400")} />
                 </button>
               </div>
+
+              {email.aiProcessed && email.aiUrgency && (
+                <span
+                  className={cn(
+                    "w-2 h-2 rounded-full shrink-0 mt-3",
+                    urgencyDotColors[email.aiUrgency]
+                  )}
+                  title={`${email.aiUrgency} urgency`}
+                  data-testid={`urgency-${email.id}`}
+                />
+              )}
 
               <div
                 className={cn(
@@ -318,11 +346,23 @@ export function EmailList({
                 <div className="flex items-center gap-2">
                   <span
                     className="text-xs text-muted-foreground truncate flex-1"
-                    dangerouslySetInnerHTML={{ __html: highlightText(email.preview, search) }}
+                    dangerouslySetInnerHTML={{ __html: highlightText(previewText, search) }}
                   />
                   <div className="flex items-center gap-1 shrink-0">
+                    {email.aiDraftReply && (
+                      <Sparkles className="w-3 h-3 text-primary" title="AI draft available" />
+                    )}
                     {email.attachments > 0 && (
                       <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
+                    {email.aiCategory && (
+                      <Badge
+                        variant="secondary"
+                        className={cn("text-xs py-0 px-1.5 h-4 border-0", categoryColors[email.aiCategory])}
+                        data-testid={`ai-category-${email.id}`}
+                      >
+                        {email.aiCategory}
+                      </Badge>
                     )}
                     {email.labels.map((label) => (
                       <Badge

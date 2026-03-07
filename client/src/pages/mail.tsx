@@ -5,6 +5,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { EmailList } from "@/components/email-list";
 import { EmailDetail } from "@/components/email-detail";
 import { ComposeDialog, type ComposeData } from "@/components/compose-dialog";
+import { MorningBriefing } from "@/components/morning-briefing";
+import { AiCommandBar } from "@/components/ai-command-bar";
 import {
   SidebarProvider,
   SidebarTrigger,
@@ -37,7 +39,7 @@ const FOLDER_LABELS: Record<string, string> = {
   inbox: "Inbox",
   starred: "Starred",
   sent: "Sent",
-  drafts: "Drafts",
+  "pending-approvals": "Pending Approvals",
   spam: "Spam",
   trash: "Trash",
   all: "All Mail",
@@ -73,11 +75,13 @@ export default function MailPage() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [composing, setComposing] = useState(false);
   const [replyTo, setReplyTo] = useState<Email | null>(null);
+  const [composePrefill, setComposePrefill] = useState<{ to: string; subject: string; body: string } | null>(null);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [pendingSend, setPendingSend] = useState<ComposeData | null>(null);
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user, logoutMutation } = useAuth();
@@ -103,6 +107,7 @@ export default function MailPage() {
   const invalidateAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
     queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/ai/activity"] });
   }, [queryClient]);
 
   const markReadMutation = useMutation({
@@ -262,6 +267,7 @@ export default function MailPage() {
 
   const handleReply = (email: Email) => {
     setReplyTo(email);
+    setComposePrefill(null);
     setComposing(true);
   };
 
@@ -302,6 +308,7 @@ export default function MailPage() {
       setPendingSend(null);
       setUndoTimer(null);
       setReplyTo(null);
+      setComposePrefill(null);
     }, 5000);
 
     setUndoTimer(timer);
@@ -309,6 +316,13 @@ export default function MailPage() {
 
   const handleCompose = () => {
     setReplyTo(null);
+    setComposePrefill(null);
+    setComposing(true);
+  };
+
+  const handleComposeWithPrefill = (prefill: { to: string; subject: string; body: string }) => {
+    setReplyTo(null);
+    setComposePrefill(prefill);
     setComposing(true);
   };
 
@@ -320,6 +334,12 @@ export default function MailPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandBarOpen(true);
+        return;
+      }
+
       const target = e.target as HTMLElement;
       const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
       if (isInput) return;
@@ -361,6 +381,7 @@ export default function MailPage() {
           if (composing) {
             setComposing(false);
             setReplyTo(null);
+            setComposePrefill(null);
           } else if (selectedEmail) {
             setSelectedEmail(null);
           }
@@ -475,6 +496,7 @@ export default function MailPage() {
                     <div><kbd className="bg-muted px-1 rounded text-xs">e</kbd> Archive</div>
                     <div><kbd className="bg-muted px-1 rounded text-xs">j/k</kbd> Navigate</div>
                     <div><kbd className="bg-muted px-1 rounded text-xs">/</kbd> Search</div>
+                    <div><kbd className="bg-muted px-1 rounded text-xs">⌘K</kbd> AI Command</div>
                     <div><kbd className="bg-muted px-1 rounded text-xs">Esc</kbd> Close</div>
                   </div>
                 </TooltipContent>
@@ -548,24 +570,18 @@ export default function MailPage() {
                   onMarkRead={(id, read) => markReadMutation.mutate({ id, read })}
                   onMove={(id, targetFolder) => moveMutation.mutate({ id, targetFolder })}
                   onArchive={(id) => archiveMutation.mutate(id)}
+                  onCompose={handleComposeWithPrefill}
                 />
               </div>
             )}
 
             {!selectedEmail && (
-              <div className="hidden md:flex flex-1 items-center justify-center">
-                <div className="text-center px-8">
-                  <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                    <div className="w-10 h-10 text-muted-foreground flex items-center justify-center font-bold text-primary text-xl">
-                      AI
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">AIMAIL</h3>
-                  <p className="text-sm text-muted-foreground">Select an email to read</p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Press <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">c</kbd> to compose
-                  </p>
-                </div>
+              <div className="hidden md:flex flex-1 overflow-hidden">
+                <MorningBriefing
+                  userName={user?.displayName}
+                  emails={emails}
+                  onSelectEmail={handleSelectEmail}
+                />
               </div>
             )}
           </div>
@@ -574,11 +590,14 @@ export default function MailPage() {
 
       <ComposeDialog
         isOpen={composing}
-        onClose={() => { setComposing(false); setReplyTo(null); }}
+        onClose={() => { setComposing(false); setReplyTo(null); setComposePrefill(null); }}
         onSend={handleSend}
         isSending={sendMutation.isPending}
         replyTo={replyTo}
+        prefill={composePrefill}
       />
+
+      <AiCommandBar open={commandBarOpen} onOpenChange={setCommandBarOpen} />
     </SidebarProvider>
   );
 }

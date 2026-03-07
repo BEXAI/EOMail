@@ -26,6 +26,7 @@ interface ComposeDialogProps {
   onSend: (data: ComposeData) => void;
   isSending: boolean;
   replyTo?: Email | null;
+  prefill?: { to: string; subject: string; body: string } | null;
 }
 
 export interface ComposeData {
@@ -36,7 +37,7 @@ export interface ComposeData {
   body: string;
 }
 
-export function ComposeDialog({ isOpen, onClose, onSend, isSending, replyTo }: ComposeDialogProps) {
+export function ComposeDialog({ isOpen, onClose, onSend, isSending, replyTo, prefill }: ComposeDialogProps) {
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [to, setTo] = useState("");
@@ -52,11 +53,16 @@ export function ComposeDialog({ isOpen, onClose, onSend, isSending, replyTo }: C
       if (replyTo) {
         setTo(replyTo.fromEmail);
         setSubject(`Re: ${replyTo.subject.replace(/^Re: /, "")}`);
+        setBody("");
+      } else if (prefill) {
+        setTo(prefill.to);
+        setSubject(prefill.subject);
+        setBody(prefill.body);
       } else {
         setTo("");
         setSubject("");
+        setBody("");
       }
-      setBody("");
       setCc("");
       setBcc("");
       setShowCc(false);
@@ -64,7 +70,7 @@ export function ComposeDialog({ isOpen, onClose, onSend, isSending, replyTo }: C
       setMinimized(false);
       setMaximized(false);
     }
-  }, [isOpen, replyTo]);
+  }, [isOpen, replyTo, prefill]);
 
   const handleSend = () => {
     if (!to) return;

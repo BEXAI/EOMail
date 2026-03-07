@@ -1,6 +1,6 @@
-import { type User, type InsertUser, type Email, type InsertEmail, users, emails } from "@shared/schema";
+import { type User, type InsertUser, type Email, type InsertEmail, type AgentActivity, type InsertAgentActivity, users, emails, agentActivity } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, ilike, desc, inArray, ne, sql } from "drizzle-orm";
+import { eq, and, or, ilike, desc, inArray, ne, sql, isNotNull } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -16,6 +16,14 @@ export interface IStorage {
   deleteEmails(ids: string[], userId: string): Promise<number>;
   getEmailCounts(userId: string): Promise<Record<string, number>>;
   seedEmailsForUser(userId: string): Promise<void>;
+
+  getUnprocessedEmails(userId: string): Promise<Email[]>;
+  getPendingApprovals(userId: string): Promise<Email[]>;
+  getPendingApprovalCount(userId: string): Promise<number>;
+
+  getAgentActivity(userId: string): Promise<AgentActivity[]>;
+  createAgentActivity(data: InsertAgentActivity): Promise<AgentActivity>;
+  updateAgentActivity(id: string, updates: Partial<AgentActivity>): Promise<AgentActivity | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -43,6 +51,10 @@ export class DatabaseStorage implements IStorage {
     } else if (folder === "all") {
       conditions.push(ne(emails.folder, "trash"));
       conditions.push(ne(emails.folder, "spam"));
+    } else if (folder === "pending-approvals") {
+      conditions.push(isNotNull(emails.aiDraftReply));
+      conditions.push(ne(emails.folder, "sent"));
+      conditions.push(ne(emails.folder, "trash"));
     } else {
       conditions.push(eq(emails.folder, folder));
     }
@@ -126,6 +138,7 @@ export class DatabaseStorage implements IStorage {
         folder: emails.folder,
         read: emails.read,
         starred: emails.starred,
+        aiDraftReply: emails.aiDraftReply,
       })
       .from(emails)
       .where(eq(emails.userId, userId));
@@ -138,7 +151,70 @@ export class DatabaseStorage implements IStorage {
       spam: allEmails.filter((e) => e.folder === "spam").length,
       trash: allEmails.filter((e) => e.folder === "trash").length,
       all: allEmails.filter((e) => e.folder !== "trash" && e.folder !== "spam").length,
+      "pending-approvals": allEmails.filter((e) => e.aiDraftReply && e.folder !== "sent" && e.folder !== "trash").length,
     };
+  }
+
+  async getUnprocessedEmails(userId: string): Promise<Email[]> {
+    return db
+      .select()
+      .from(emails)
+      .where(and(eq(emails.userId, userId), eq(emails.aiProcessed, false)))
+      .orderBy(desc(emails.timestamp));
+  }
+
+  async getPendingApprovals(userId: string): Promise<Email[]> {
+    return db
+      .select()
+      .from(emails)
+      .where(
+        and(
+          eq(emails.userId, userId),
+          isNotNull(emails.aiDraftReply),
+          ne(emails.folder, "sent"),
+          ne(emails.folder, "trash")
+        )
+      )
+      .orderBy(desc(emails.timestamp));
+  }
+
+  async getPendingApprovalCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(emails)
+      .where(
+        and(
+          eq(emails.userId, userId),
+          isNotNull(emails.aiDraftReply),
+          ne(emails.folder, "sent"),
+          ne(emails.folder, "trash")
+        )
+      );
+    return Number(result[0]?.count || 0);
+  }
+
+  async getAgentActivity(userId: string): Promise<AgentActivity[]> {
+    return db
+      .select()
+      .from(agentActivity)
+      .where(eq(agentActivity.userId, userId))
+      .orderBy(desc(agentActivity.createdAt))
+      .limit(20);
+  }
+
+  async createAgentActivity(data: InsertAgentActivity): Promise<AgentActivity> {
+    const [activity] = await db.insert(agentActivity).values(data).returning();
+    return activity;
+  }
+
+  async updateAgentActivity(id: string, updates: Partial<AgentActivity>): Promise<AgentActivity | undefined> {
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    const [activity] = await db
+      .update(agentActivity)
+      .set(safeUpdates)
+      .where(eq(agentActivity.id, id))
+      .returning();
+    return activity;
   }
 
   async seedEmailsForUser(userId: string): Promise<void> {

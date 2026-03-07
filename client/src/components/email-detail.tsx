@@ -1,9 +1,18 @@
 import { type Email } from "@shared/schema";
 import { getInitials, getSenderColor, cn } from "@/lib/utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   ArrowLeft,
   Star,
@@ -21,6 +30,15 @@ import {
   AlertTriangle,
   Mail,
   MailOpen,
+  Sparkles,
+  Brain,
+  Shield,
+  ShieldAlert,
+  Check,
+  Pencil,
+  X,
+  Loader2,
+  Zap,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -40,9 +58,64 @@ interface EmailDetailProps {
   onMarkRead: (id: string, read: boolean) => void;
   onMove: (id: string, folder: string) => void;
   onArchive: (id: string) => void;
+  onCompose?: (prefill: { to: string; subject: string; body: string }) => void;
 }
 
-export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onReply, onMarkRead, onMove, onArchive }: EmailDetailProps) {
+const urgencyColors: Record<string, { bg: string; text: string; label: string }> = {
+  high: { bg: "bg-red-100 dark:bg-red-950", text: "text-red-700 dark:text-red-400", label: "High" },
+  medium: { bg: "bg-yellow-100 dark:bg-yellow-950", text: "text-yellow-700 dark:text-yellow-400", label: "Medium" },
+  low: { bg: "bg-green-100 dark:bg-green-950", text: "text-green-700 dark:text-green-400", label: "Low" },
+};
+
+const categoryIcons: Record<string, string> = {
+  finance: "💰",
+  scheduling: "📅",
+  newsletter: "📰",
+  "action-required": "⚡",
+  social: "👋",
+  notification: "🔔",
+};
+
+export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onReply, onMarkRead, onMove, onArchive, onCompose }: EmailDetailProps) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const processEmailMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/ai/process/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/activity"] });
+      toast({ title: "AI analysis complete" });
+    },
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/ai/approve/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+      toast({ title: "Reply sent", description: "AI draft reply has been approved and sent." });
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/ai/reject/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+      toast({ title: "Draft rejected", description: "AI draft reply has been discarded." });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-full p-6 gap-4">
@@ -85,6 +158,25 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
 
   const initials = getInitials(email.from);
   const avatarColor = getSenderColor(email.from);
+  const showSpamWarning = email.aiSpamScore !== null && email.aiSpamScore > 70;
+  const urgency = urgencyColors[email.aiUrgency || "low"];
+
+  const handleSuggestedAction = () => {
+    if (!email.aiSuggestedAction) return;
+    switch (email.aiSuggestedAction) {
+      case "archive":
+        onArchive(email.id);
+        break;
+      case "reply":
+        onReply(email);
+        break;
+      case "flag":
+        onStar(email.id, true);
+        break;
+      default:
+        break;
+    }
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden" data-testid="email-detail">
@@ -147,6 +239,23 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {!email.aiProcessed && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => processEmailMutation.mutate(email.id)}
+              disabled={processEmailMutation.isPending}
+              className="gap-1.5 text-xs"
+              data-testid="button-analyze-ai"
+            >
+              {processEmailMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Brain className="w-3.5 h-3.5" />
+              )}
+              Analyze with AI
+            </Button>
+          )}
           <Button size="icon" variant="ghost" data-testid="button-print">
             <Printer className="w-4 h-4 text-muted-foreground" />
           </Button>
@@ -173,6 +282,99 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
 
       <div className="flex-1 overflow-y-auto">
         <div className="px-4 md:px-6 pt-6 pb-4">
+          {showSpamWarning && (
+            <Card className="mb-4 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/50" data-testid="gatekeeper-warning">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <ShieldAlert className="w-6 h-6 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-red-700 dark:text-red-400 text-sm">
+                        Aegis Gatekeeper Warning
+                      </span>
+                      <Badge variant="destructive" className="text-xs">
+                        {email.aiSpamScore}% Risk
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-red-600/80 dark:text-red-400/80">
+                      {email.aiSpamReason}
+                    </p>
+                    <div className="flex items-center gap-2 mt-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                        onClick={() => onMove(email.id, "inbox")}
+                        data-testid="button-trust-anyway"
+                      >
+                        <Shield className="w-3 h-3 mr-1" /> Trust Anyway
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="text-xs"
+                        onClick={() => onDelete(email.id)}
+                        data-testid="button-report-delete"
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" /> Report & Delete
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {email.aiProcessed && (
+            <Collapsible defaultOpen>
+              <Card className="mb-4 border-border bg-muted/30" data-testid="ai-insights-card">
+                <CollapsibleTrigger className="w-full">
+                  <CardContent className="p-3 flex items-center gap-2 cursor-pointer">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-semibold text-foreground">AI Insights</span>
+                    {email.aiUrgency && urgency && (
+                      <Badge className={cn("text-xs ml-auto", urgency.bg, urgency.text)} variant="secondary">
+                        {urgency.label} Urgency
+                      </Badge>
+                    )}
+                    {email.aiCategory && (
+                      <Badge variant="outline" className="text-xs">
+                        {categoryIcons[email.aiCategory] || "📧"} {email.aiCategory}
+                      </Badge>
+                    )}
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-1" />
+                  </CardContent>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-3 pb-3 space-y-3">
+                    {email.aiSummary && (
+                      <div className="bg-primary/5 rounded-md p-3">
+                        <p className="text-sm text-foreground/80" data-testid="ai-summary">
+                          {email.aiSummary}
+                        </p>
+                      </div>
+                    )}
+                    {email.aiSuggestedAction && (
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-3.5 h-3.5 text-orange-500" />
+                        <span className="text-xs text-muted-foreground">AI suggests:</span>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="text-xs h-6 px-2"
+                          onClick={handleSuggestedAction}
+                          data-testid="button-suggested-action"
+                        >
+                          {email.aiSuggestedAction.charAt(0).toUpperCase() + email.aiSuggestedAction.slice(1)}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          )}
+
           <h1 className="text-2xl font-semibold text-foreground mb-4 leading-tight" data-testid="email-subject-detail">
             {email.subject}
           </h1>
@@ -258,6 +460,67 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
                 ))}
               </div>
             </div>
+          )}
+
+          {email.aiDraftReply && (
+            <Card className="mt-6 border-primary/30 bg-primary/5" data-testid="pending-approval-card">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold text-foreground">AI Draft Reply — Pending Your Approval</span>
+                </div>
+                <div className="bg-background rounded-md p-3 mb-4 border border-border">
+                  <p className="text-sm text-foreground/80 whitespace-pre-wrap" data-testid="ai-draft-reply-text">
+                    {email.aiDraftReply}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    onClick={() => approveMutation.mutate(email.id)}
+                    disabled={approveMutation.isPending}
+                    className="gap-1.5"
+                    data-testid="button-approve-send"
+                  >
+                    {approveMutation.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Check className="w-3.5 h-3.5" />
+                    )}
+                    Approve & Send
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (onCompose) {
+                        onCompose({
+                          to: email.fromEmail,
+                          subject: `Re: ${email.subject}`,
+                          body: email.aiDraftReply!,
+                        });
+                      }
+                    }}
+                    className="gap-1.5"
+                    data-testid="button-edit-draft"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => rejectMutation.mutate(email.id)}
+                    disabled={rejectMutation.isPending}
+                    className="gap-1.5 text-muted-foreground"
+                    data-testid="button-reject-draft"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Reject
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       </div>

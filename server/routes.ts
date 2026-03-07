@@ -3,6 +3,8 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { insertEmailSchema } from "@shared/schema";
 import { requireAuth } from "./auth";
+import { processEmail, processAllUnprocessed } from "./ai-pipeline";
+import { draftReply, generateBriefing, handleAiCommand } from "./ai";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   app.get("/api/emails", requireAuth, async (req, res) => {
@@ -99,6 +101,127 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: "Failed to delete email" });
+    }
+  });
+
+  app.post("/api/ai/process/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const userDisplayName = req.user!.displayName;
+      const result = await processEmail(req.params.id, userId, userDisplayName);
+      if (!result) return res.status(404).json({ error: "Email not found" });
+      res.json(result);
+    } catch (e) {
+      console.error("AI process error:", e);
+      res.status(500).json({ error: "Failed to process email with AI" });
+    }
+  });
+
+  app.post("/api/ai/process-all", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const userDisplayName = req.user!.displayName;
+      const count = await processAllUnprocessed(userId, userDisplayName);
+      res.json({ processed: count });
+    } catch (e) {
+      console.error("AI process-all error:", e);
+      res.status(500).json({ error: "Failed to process emails with AI" });
+    }
+  });
+
+  app.post("/api/ai/draft-reply/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const email = await storage.getEmail(req.params.id, userId);
+      if (!email) return res.status(404).json({ error: "Email not found" });
+      const draft = await draftReply(email, req.user!.displayName);
+      const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: draft });
+      res.json(updated);
+    } catch (e) {
+      console.error("AI draft-reply error:", e);
+      res.status(500).json({ error: "Failed to generate draft reply" });
+    }
+  });
+
+  app.get("/api/ai/briefing", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const recentEmails = await storage.getEmails(userId, "all");
+      const briefing = await generateBriefing(recentEmails);
+      res.json({ briefing });
+    } catch (e) {
+      console.error("AI briefing error:", e);
+      res.status(500).json({ error: "Failed to generate briefing" });
+    }
+  });
+
+  app.get("/api/ai/activity", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const activity = await storage.getAgentActivity(userId);
+      res.json(activity);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch agent activity" });
+    }
+  });
+
+  app.post("/api/ai/command", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { prompt } = req.body;
+      if (!prompt) return res.status(400).json({ error: "prompt is required" });
+      const recentEmails = await storage.getEmails(userId, "all");
+      const response = await handleAiCommand(prompt, recentEmails);
+      res.json({ response });
+    } catch (e) {
+      console.error("AI command error:", e);
+      res.status(500).json({ error: "Failed to process AI command" });
+    }
+  });
+
+  app.post("/api/ai/approve/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const email = await storage.getEmail(req.params.id, userId);
+      if (!email) return res.status(404).json({ error: "Email not found" });
+      if (!email.aiDraftReply) return res.status(400).json({ error: "No draft reply to approve" });
+
+      const now = new Date();
+      await storage.createEmail({
+        userId,
+        from: req.user!.displayName,
+        fromEmail: req.user!.email,
+        to: email.from,
+        toEmail: email.fromEmail,
+        cc: "",
+        bcc: "",
+        subject: `Re: ${email.subject}`,
+        body: `<p>${email.aiDraftReply.replace(/\n/g, "</p><p>")}</p>`,
+        preview: email.aiDraftReply.slice(0, 120),
+        timestamp: now,
+        read: true,
+        starred: false,
+        folder: "sent",
+        labels: [],
+        attachments: 0,
+      });
+
+      const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: null });
+      res.json({ success: true, email: updated });
+    } catch (e) {
+      console.error("AI approve error:", e);
+      res.status(500).json({ error: "Failed to approve and send" });
+    }
+  });
+
+  app.post("/api/ai/reject/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: null });
+      if (!updated) return res.status(404).json({ error: "Email not found" });
+      res.json(updated);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to reject draft" });
     }
   });
 
