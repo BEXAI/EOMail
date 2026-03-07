@@ -9,7 +9,7 @@ services:
     name: eomail
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build && npm run db:push
+    buildCommand: npm ci && npm run build && npm run db:push
     startCommand: npm run start
     envVars:
       - key: NODE_ENV
@@ -24,6 +24,8 @@ services:
         generateValue: true
       - key: DOMAIN
         value: eomail.co
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://eomail.co
       - key: OPENAI_API_KEY
         sync: false
       - key: RESEND_API_KEY
