@@ -129,7 +129,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange }: AiChatPanelPro
         </button>
       )}
 
-      {isOpen && <div
+      {isOpen && (<div
         className={cn(
           "fixed z-50",
           isFullscreen
@@ -311,6 +311,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange }: AiChatPanelPro
           </div>
         </div>
       </div>
+      )}
     </>
   );
 }
