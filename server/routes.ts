@@ -6,8 +6,10 @@ import { storage } from "./storage";
 import { insertEmailSchema, type InsertEmail } from "@shared/schema";
 import { requireAuth } from "./auth";
 import { processEmail, processAllUnprocessed } from "./ai-pipeline";
-import { draftReply, generateBriefing, handleAiCommand, classifyEmail } from "./ai";
+import { draftReply, generateBriefing, handleAiCommand, handleAiChat, classifyEmail, expandDraft, type ChatMessage } from "./ai";
 import { sendEmail } from "./email";
+import { emailContextIndex } from "./ai-context";
+import { getUserPreferences, setUserPreferences } from "./system-wrapper/context-manager";
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -127,6 +129,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const email = await storage.createEmail(parsed.data);
+      emailContextIndex.invalidate(userId);
       res.status(201).json(email);
     } catch (e) {
       res.status(500).json({ error: "Failed to create email" });
@@ -140,6 +143,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!parsed.success) return res.status(400).json({ error: "Invalid update fields", details: parsed.error.issues });
       const updated = await storage.updateEmail(req.params.id, userId, parsed.data);
       if (!updated) return res.status(404).json({ error: "Email not found" });
+      emailContextIndex.invalidate(userId);
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: "Failed to update email" });
@@ -154,10 +158,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { ids, action, updates } = parsed.data;
       if (action === "delete") {
         const count = await storage.deleteEmails(ids, userId);
+        emailContextIndex.invalidate(userId);
         return res.json({ deleted: count });
       }
       if (action === "update" && updates) {
         const results = await storage.updateEmails(ids, userId, updates);
+        emailContextIndex.invalidate(userId);
         return res.json(results);
       }
       res.status(400).json({ error: "Invalid action" });
@@ -171,6 +177,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = req.user!.id;
       const deleted = await storage.deleteEmail(req.params.id, userId);
       if (!deleted) return res.status(404).json({ error: "Email not found" });
+      emailContextIndex.invalidate(userId);
       res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: "Failed to delete email" });
@@ -220,7 +227,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/ai/briefing", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
-      const recentEmails = await storage.getEmails(userId, "all");
+      const emailContext = await emailContextIndex.getContext(userId);
       const activities = await storage.getAgentActivity(userId);
 
       const agentCounts: Record<string, { complete: number; pending: number }> = {};
@@ -236,7 +243,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .map(([name, c]) => `${name}: ${c.complete} tasks completed`);
       const agentSummary = summaryParts.length > 0 ? summaryParts.join("; ") : undefined;
 
-      const briefing = await generateBriefing(recentEmails, agentSummary);
+      const briefing = await generateBriefing(emailContext, agentSummary);
 
       const agentStats = Object.entries(agentCounts).map(([name, c]) => ({
         name,
@@ -267,12 +274,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { prompt } = req.body;
       if (!prompt) return res.status(400).json({ error: "prompt is required" });
       if (typeof prompt !== "string" || prompt.length > 500) return res.status(400).json({ error: "prompt must be a string of 500 characters or less" });
-      const recentEmails = await storage.getEmails(userId, "all");
-      const response = await handleAiCommand(prompt, recentEmails);
+      const emailContext = await emailContextIndex.getContext(userId);
+      const response = await handleAiCommand(prompt, emailContext);
       res.json({ response });
     } catch (e) {
       console.error("AI command error:", e);
       res.status(500).json({ error: "Failed to process AI command" });
+    }
+  });
+
+  app.post("/api/ai/chat", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { messages } = req.body;
+      if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ error: "messages array is required" });
+      }
+      if (messages.length > 50) {
+        return res.status(400).json({ error: "Too many messages in conversation" });
+      }
+      const validRoles = new Set(["user", "assistant"]);
+      const validated: ChatMessage[] = [];
+      for (const msg of messages) {
+        if (!msg || typeof msg.content !== "string" || !validRoles.has(msg.role)) {
+          return res.status(400).json({ error: "Each message must have a valid role and content" });
+        }
+        validated.push({ role: msg.role, content: msg.content.slice(0, 2000) });
+      }
+      const emailContext = await emailContextIndex.getContext(userId);
+      const response = await handleAiChat(validated, emailContext);
+      res.json({ response });
+    } catch (e) {
+      console.error("AI chat error:", e);
+      res.status(500).json({ error: "Failed to process chat message" });
     }
   });
 
@@ -319,6 +353,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: null });
+      emailContextIndex.invalidate(userId);
       res.json({ success: true, email: updated });
     } catch (e) {
       console.error("AI approve error:", e);
@@ -510,6 +545,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         detail: `Organized ${organized} emails into folders — ${folderSummary}`,
       });
 
+      emailContextIndex.invalidate(userId);
       const createdFolders = await storage.getCustomFolders(userId);
       res.json({ success: true, organized, folders: createdFolders, stats: folderStats });
     } catch (e) {
@@ -523,6 +559,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = req.user!.id;
       const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: null });
       if (!updated) return res.status(404).json({ error: "Email not found" });
+      emailContextIndex.invalidate(userId);
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: "Failed to reject draft" });
@@ -577,6 +614,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           attachments: 0,
         });
 
+        emailContextIndex.invalidate(user.id);
         processEmail(email.id, user.id).catch((e) =>
           console.error("AI triage failed for inbound email:", e)
         );
@@ -587,6 +625,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) {
       console.error("Inbound webhook error:", e);
       res.status(500).json({ error: "Failed to process inbound email" });
+    }
+  });
+
+  app.post("/api/ai/expand-draft", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const { notes, recipientName, recipientCompany, relationship } = req.body as {
+        notes: string;
+        recipientName: string;
+        recipientCompany?: string;
+        relationship?: "client" | "colleague" | "vendor" | "unknown";
+      };
+
+      if (!notes || !recipientName) {
+        return res.status(400).json({ error: "notes and recipientName are required" });
+      }
+      if (typeof notes !== "string" || notes.length > 2000) {
+        return res.status(400).json({ error: "notes must be a string of 2000 characters or less" });
+      }
+      if (typeof recipientName !== "string" || recipientName.length > 100) {
+        return res.status(400).json({ error: "recipientName must be a string of 100 characters or less" });
+      }
+
+      const expanded = await expandDraft(
+        notes,
+        recipientName,
+        recipientCompany,
+        user.displayName,
+        relationship || "unknown"
+      );
+
+      res.json({ draft: expanded });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to expand draft" });
+    }
+  });
+
+  app.get("/api/user/preferences", requireAuth, async (req, res) => {
+    try {
+      const prefs = getUserPreferences(req.user!.id);
+      res.json(prefs);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch preferences" });
+    }
+  });
+
+  const preferencesSchema = z.object({
+    preferred_signature: z.string().max(500).optional(),
+    default_tone: z.enum(["professional", "casual", "formal", "assertive"]).optional(),
+    industry_jargon_toggle: z.boolean().optional(),
+    formality_level: z.number().int().min(1).max(5).optional(),
+  }).strict();
+
+  app.post("/api/user/preferences", requireAuth, async (req, res) => {
+    try {
+      const parsed = preferencesSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid preferences", details: parsed.error.issues });
+      const updated = setUserPreferences(req.user!.id, parsed.data);
+      res.json(updated);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to update preferences" });
     }
   });
 

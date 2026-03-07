@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { summarizeEmail, classifyEmail, draftReply, analyzeSpamRisk } from "./ai";
+import { emailContextIndex } from "./ai-context";
 import type { Email } from "@shared/schema";
 
 function getAgentName(category: string): string {
@@ -13,9 +14,11 @@ function getAgentName(category: string): string {
   }
 }
 
-export async function processEmail(emailId: string, userId: string, userDisplayName: string): Promise<Email | null> {
-  const email = await storage.getEmail(emailId, userId);
+export async function processEmail(emailId: string, userId: string, userDisplayName?: string, preloadedEmail?: Email): Promise<Email | null> {
+  const email = preloadedEmail ?? await storage.getEmail(emailId, userId);
   if (!email) return null;
+
+  const displayName = userDisplayName || "User";
 
   const gatekeeperActivity = await storage.createAgentActivity({
     userId,
@@ -57,7 +60,7 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
       classification.suggestedAction === "reply" &&
       email.fromEmail !== "me@eomail.co"
     ) {
-      aiDraftReplyText = await draftReply(email, userDisplayName);
+      aiDraftReplyText = await draftReply(email, displayName);
     }
 
     const spamReasonWithMeta = JSON.stringify({
@@ -87,6 +90,8 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
       detail: detailParts.join(" — "),
     });
 
+    emailContextIndex.invalidate(userId);
+
     return updated || email;
   } catch (error) {
     console.error(`AI processing failed for email ${emailId}:`, error);
@@ -96,6 +101,7 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
     });
 
     await storage.updateEmail(emailId, userId, { aiProcessed: true });
+    emailContextIndex.invalidate(userId);
     return email;
   }
 }
@@ -106,7 +112,7 @@ export async function processAllUnprocessed(userId: string, userDisplayName: str
 
   let processed = 0;
   for (const email of unprocessed) {
-    await processEmail(email.id, userId, userDisplayName);
+    await processEmail(email.id, userId, userDisplayName, email);
     processed++;
   }
   return processed;

@@ -9,7 +9,7 @@ A full-featured Gmail replica transformed into an AI-powered autonomous email as
 - **Frontend**: React + Vite, TanStack Query, Wouter routing, Tailwind CSS, Shadcn UI
 - **Backend**: Express.js with PostgreSQL database (Drizzle ORM)
 - **Auth**: Passport.js local strategy, express-session with connect-pg-simple, bcrypt password hashing
-- **AI**: OpenAI gpt-4o-mini via OPENAI_API_KEY (user's own key)
+- **AI**: System Wrapper v2 — Context Manager → Prompt Orchestrator → API Gateway (gpt-4o-mini for simple tasks, gpt-4o for complex, with fallback chaining) → Security Layer (PII redaction)
 - **Email**: Resend SDK for outbound email delivery and inbound webhook processing
 - **Shared**: Drizzle schema types in `shared/schema.ts`
 
@@ -76,6 +76,14 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
   - Action-Required: priority indicator, quick reply/flag actions
 - **Tone Micro-Prompts**: Draft reply editing with one-click tone chips ("More assertive", "More casual", "Shorter", "More formal", "Add gratitude")
 - **Enhanced Gatekeeper**: Impersonation probability percentage, threat type badges (phishing/impersonation/urgency-manipulation/spam), collapsible technical analysis
+- **AI Chat Panel**: Persistent bottom-of-screen (1/3 height) chat interface with:
+  - Transparent dark glass morphism background (backdrop-blur)
+  - Multi-turn conversation with full inbox context (20 most recent emails)
+  - Quick action buttons: Scan threats, Financial summary, Schedule overview, Inbox briefing
+  - Chief of Staff persona — decisive, action-oriented, references agents by name
+  - Markdown rendering (bold, italic, code, lists)
+  - Collapsible/expandable, closeable from header bar
+  - Toggle via Bot icon button in header (data-testid: button-ai-chat-toggle)
 - **Pending Approvals Workflow**: Virtual folder, AI draft replies with Approve & Send / Edit / Reject
 - **Active Agents Sidebar**: Named agents with distinct icons/colors, real-time status, auto-refresh
 
@@ -101,8 +109,14 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - `client/src/components/theme-toggle.tsx` - Dark/light mode toggle component
 - `client/src/components/morning-briefing.tsx` - Chief of Staff briefing dashboard with agent stats
 - `client/src/components/ai-command-bar.tsx` - Agent-grouped AI Action Center (Cmd+K)
-- `server/ai.ts` - AI service functions with tone support and enhanced spam analysis
-- `server/ai-pipeline.ts` - AI processing pipeline with named agent assignments
+- `client/src/components/ai-chat-panel.tsx` - Persistent AI chat panel (bottom 1/3, glass morphism, multi-turn)
+- `server/ai.ts` - AI service layer (System Wrapper v2) — routes all LLM calls through Context Manager → Prompt Orchestrator → API Gateway → Security Layer
+- `server/ai-context.ts` - Per-user email context index cache (TTL 5min, max 20 emails, invalidated on mutations)
+- `server/ai-pipeline.ts` - AI processing pipeline with named agent assignments, accepts preloaded emails to avoid redundant fetches
+- `server/system-wrapper/security.ts` - PII redaction (credit cards, SSN, passwords, API keys, bank accounts) before API calls
+- `server/system-wrapper/context-manager.ts` - Thread compression (rolling window), metadata injection, user preference store (tone, signature, formality)
+- `server/system-wrapper/prompt-orchestrator.ts` - Task-specific prompt templates with complexity routing (simple→gpt-4o-mini, complex→gpt-4o)
+- `server/system-wrapper/api-gateway.ts` - Model routing, exponential backoff retry (3x), fallback chaining (gpt-4o→gpt-4o-mini), 15s timeout, PII sanitization
 - `server/email.ts` - Resend SDK email service (send, password reset, verification emails)
 - `server/routes.ts` - API routes including AI endpoints, inbound webhook
 - `server/storage.ts` - DatabaseStorage with user lookup methods (by email, reset token, verification token, mailbox)
@@ -138,7 +152,13 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - `POST /api/ai/command` — Natural language command
 - `POST /api/ai/approve/:id` — Approve and send AI draft (sends via Resend)
 - `POST /api/ai/reject/:id` — Reject AI draft
+- `POST /api/ai/chat` — Multi-turn AI chat with full inbox context (messages array, max 50 turns, 2000 char limit per message)
 - `POST /api/ai/auto-organize` — AI-powered auto-organize: classifies inbox emails and copies them into category folders
+- `POST /api/ai/expand-draft` — Expand shorthand notes into full professional email (notes, recipientName, recipientCompany?, relationship?)
+
+### User Preferences
+- `GET /api/user/preferences` — Get AI behavior preferences (tone, signature, formality, jargon toggle)
+- `POST /api/user/preferences` — Update AI behavior preferences
 
 ### Custom Folders
 - `GET /api/folders` — List user's custom folders

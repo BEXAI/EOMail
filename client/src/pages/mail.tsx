@@ -7,6 +7,7 @@ import { EmailDetail } from "@/components/email-detail";
 import { ComposeDialog, type ComposeData } from "@/components/compose-dialog";
 import { MorningBriefing } from "@/components/morning-briefing";
 import { AiCommandBar } from "@/components/ai-command-bar";
+import { AiChatPanel } from "@/components/ai-chat-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   SidebarProvider,
@@ -22,6 +23,7 @@ import {
   X,
   SlidersHorizontal,
   Keyboard,
+  Bot,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -57,6 +59,8 @@ export default function MailPage() {
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
+  const [chatPanelOpen, setChatPanelOpen] = useState(false);
+  const [chatPanelExpanded, setChatPanelExpanded] = useState(true);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user, logoutMutation } = useAuth();
@@ -491,7 +495,7 @@ export default function MailPage() {
 
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full bg-background overflow-hidden">
+      <div className={cn("flex w-full bg-background overflow-hidden transition-all duration-300", chatPanelOpen && chatPanelExpanded ? "h-[67vh]" : chatPanelOpen && !chatPanelExpanded ? "h-[calc(100vh-48px)]" : "h-screen")}>
         <AppSidebar
           onCompose={handleCompose}
           counts={counts}
@@ -565,6 +569,20 @@ export default function MailPage() {
                     <div><kbd className="bg-muted px-1 rounded text-xs">Esc</kbd> Close</div>
                   </div>
                 </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setChatPanelOpen(!chatPanelOpen)}
+                    className={cn(chatPanelOpen && "bg-violet-500/10 text-violet-500")}
+                    data-testid="button-ai-chat-toggle"
+                  >
+                    <Bot className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>AI Assistant</TooltipContent>
               </Tooltip>
               <ThemeToggle />
               <div
@@ -658,6 +676,7 @@ export default function MailPage() {
       />
 
       <AiCommandBar open={commandBarOpen} onOpenChange={setCommandBarOpen} />
+      <AiChatPanel isOpen={chatPanelOpen} onToggle={() => setChatPanelOpen(false)} onExpandChange={setChatPanelExpanded} />
     </SidebarProvider>
   );
 }

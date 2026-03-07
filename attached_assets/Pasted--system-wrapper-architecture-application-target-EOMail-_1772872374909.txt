@@ -1,0 +1,111 @@
+{
+  "system_wrapper_architecture": {
+    "application_target": "EOMail.co - AI-Powered Email",
+    "version": "1.0.0",
+    "core_objective": "Optimize LLM API calls by dynamically managing email context, user preferences, and metadata to reduce latency and token consumption.",
+    "modules": {
+      "context_manager": {
+        "description": "Handles the preparation and pruning of conversational context before hitting the LLM API.",
+        "components": {
+          "thread_compressor": {
+            "strategy": "rolling_window_with_summarization",
+            "max_tokens": 4096,
+            "action": "Summarizes emails older than N turns; keeps the 3 most recent emails verbatim."
+          },
+          "metadata_injector": {
+            "fields_included": [
+              "sender_name",
+              "recipient_name",
+              "timestamp",
+              "subject_line",
+              "user_role"
+            ],
+            "purpose": "Provides the LLM with situational awareness without heavy token overhead."
+          },
+          "user_preference_store": {
+            "retrieval_method": "key_value_lookup",
+            "parameters": [
+              "preferred_signature",
+              "default_tone",
+              "industry_jargon_toggle",
+              "formality_level"
+            ]
+          }
+        }
+      },
+      "prompt_orchestrator": {
+        "description": "Dynamic prompt templates optimized for specific email tasks.",
+        "templates": {
+          "smart_reply": {
+            "system_prompt": "You are a highly efficient email assistant. Draft a concise, professional reply based on the provided email thread and the user's intent snippet. Maintain the user's default tone.",
+            "required_inputs": ["email_thread_context", "user_intent", "user_tone"]
+          },
+          "thread_summarizer": {
+            "system_prompt": "Extract the core decisions, action items, and pending questions from the following email thread. Output as a bulleted list.",
+            "required_inputs": ["email_thread_context"]
+          },
+          "draft_expander": {
+            "system_prompt": "Expand the following shorthand notes into a complete, formally structured email.",
+            "required_inputs": ["shorthand_notes", "recipient_metadata"]
+          }
+        }
+      },
+      "api_gateway": {
+        "description": "The execution layer that interfaces with the external LLM providers (e.g., OpenAI, Anthropic, Google Gemini).",
+        "routing_logic": {
+          "simple_tasks": {
+            "model": "low_latency_model (e.g., gpt-4o-mini or gemini-1.5-flash)",
+            "use_case": ["summarization", "grammar_check"]
+          },
+          "complex_tasks": {
+            "model": "high_reasoning_model (e.g., gpt-4o or gemini-1.5-pro)",
+            "use_case": ["negotiation_drafts", "escalation_responses", "multi_thread_synthesis"]
+          }
+        },
+        "resilience": {
+          "retry_policy": "exponential_backoff",
+          "max_retries": 3,
+          "timeout_ms": 15000,
+          "fallback_model_chaining": true
+        }
+      },
+      "security_and_compliance": {
+        "description": "Ensures sensitive email data is handled securely during API transmission.",
+        "features": {
+          "pii_redaction": {
+            "status": "active",
+            "method": "regex_and_ner_masking",
+            "target_entities": ["credit_cards", "social_security_numbers", "passwords"]
+          },
+          "data_retention": {
+            "policy": "zero_data_retention_via_api",
+            "provider_agreements": "Opt-out of model training enabled for all API endpoints."
+          }
+        }
+      }
+    },
+    "example_api_payload": {
+      "endpoint": "/v1/chat/completions",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer <ENCRYPTED_API_KEY>",
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "model": "optimized-email-model",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant for EOMail.co. Tone: Professional. User: Alex. Recipient: Client. Context: Discussing Q3 deliverables."
+          },
+          {
+            "role": "user",
+            "content": "Draft an email saying the Q3 deliverables are delayed by 2 days due to QA testing, but we will offer a 5% discount on the next invoice to make up for it."
+          }
+        ],
+        "temperature": 0.4,
+        "max_tokens": 500
+      }
+    }
+  }
+}
