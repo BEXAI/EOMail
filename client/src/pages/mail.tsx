@@ -676,7 +676,7 @@ export default function MailPage() {
       />
 
       <AiCommandBar open={commandBarOpen} onOpenChange={setCommandBarOpen} />
-      <AiChatPanel isOpen={chatPanelOpen} onToggle={() => setChatPanelOpen(!chatPanelOpen)} onExpandChange={setChatPanelExpanded} />
+      <AiChatPanel isOpen={chatPanelOpen} onToggle={() => setChatPanelOpen(!chatPanelOpen)} onExpandChange={setChatPanelExpanded} emailId={selectedEmail?.id} />
     </SidebarProvider>
   );
 }

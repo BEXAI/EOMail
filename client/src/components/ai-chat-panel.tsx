@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,7 @@ interface AiChatPanelProps {
   isOpen: boolean;
   onToggle: () => void;
   onExpandChange?: (expanded: boolean) => void;
+  emailId?: string;
 }
 
 const QUICK_ACTIONS = [
@@ -50,13 +51,32 @@ function formatMessage(content: string): string {
   return html;
 }
 
-export function AiChatPanel({ isOpen, onToggle, onExpandChange }: AiChatPanelProps) {
+export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: historyData } = useQuery({
+    queryKey: ["/api/ai/chat/history", emailId],
+    queryFn: async () => {
+      const url = emailId ? `/api/ai/chat/history?emailId=${emailId}` : "/api/ai/chat/history";
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to fetch history");
+      return res.json();
+    },
+    enabled: isOpen,
+  });
+
+  useEffect(() => {
+    if (historyData) {
+      setMessages(historyData.map((msg: any) => ({ role: msg.role, content: msg.content })));
+    } else {
+      setMessages([]);
+    }
+  }, [historyData, emailId]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -78,7 +98,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange }: AiChatPanelPro
 
   const chatMutation = useMutation({
     mutationFn: async (newMessages: ChatMessage[]) => {
-      const res = await apiRequest("POST", "/api/ai/chat", { messages: newMessages });
+      const res = await apiRequest("POST", "/api/ai/chat", { messages: newMessages, emailId });
       return res.json();
     },
     onSuccess: (data) => {

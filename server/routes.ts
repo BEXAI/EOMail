@@ -11,7 +11,7 @@ import { draftReply, generateBriefing, handleAiCommand, handleAiChat, classifyEm
 import { sendEmail } from "./email";
 import { getCache, setCache, invalidateCache } from "./cache";
 import { emailContextIndex } from "./ai-context";
-import { getUserPreferences, setUserPreferences } from "./system-wrapper/context-manager";
+import { getUserPreferences, setUserPreferences, type UserPreferences } from "./system-wrapper/context-manager";
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -305,10 +305,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/ai/chat/history", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const emailId = req.query.emailId as string | undefined;
+      const history = await storage.getAiChatHistory(userId, emailId || null);
+      res.json(history);
+    } catch (e) {
+      console.error("Fetch chat history error:", e);
+      res.status(500).json({ error: "Failed to fetch chat history" });
+    }
+  });
+
+  app.delete("/api/ai/chat/history", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const emailId = req.body.emailId as string | undefined;
+      if (!emailId) return res.status(400).json({ error: "emailId is required to delete specific history" });
+      await storage.deleteAiChatHistoryForEmail(userId, emailId);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("Delete chat history error:", e);
+      res.status(500).json({ error: "Failed to delete chat history" });
+    }
+  });
+
   app.post("/api/ai/chat", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
-      const { messages } = req.body;
+      const { messages, emailId } = req.body;
       if (!messages || !Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: "messages array is required" });
       }
@@ -323,8 +348,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         validated.push({ role: msg.role, content: msg.content.slice(0, 2000) });
       }
+
+      // Save the latest user query to history
+      const lastMessage = validated[validated.length - 1];
+      if (lastMessage.role === "user") {
+        await storage.createAiChatHistoryMessage({
+          userId,
+          emailId: emailId || null,
+          role: "user",
+          content: lastMessage.content,
+        });
+      }
+
       const { context: emailContext, count: emailCount } = await emailContextIndex.getContextWithCount(userId);
       const response = await handleAiChat(validated, emailContext, emailCount);
+
+      // Save AI response to history
+      await storage.createAiChatHistoryMessage({
+        userId,
+        emailId: emailId || null,
+        role: "assistant",
+        content: response,
+      });
+
       res.json({ response });
     } catch (e) {
       console.error("AI chat error:", e);
@@ -521,16 +567,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
         }
 
+        const { id, ...emailWithoutId } = email;
         emailsToCreate.push({
-          ...email,
-          id: undefined, // let the db generate it
+          ...emailWithoutId,
           folder: customFolderKey,
           aiCategory: email.aiCategory || category,
         });
 
         folderStats[folderName] = (folderStats[folderName] || 0) + 1;
       }
-      
+
       if (emailsToCreate.length > 0) {
         await storage.createEmails(emailsToCreate);
       }
@@ -705,7 +751,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const parsed = preferencesSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid preferences", details: parsed.error.issues });
-      const updated = setUserPreferences(req.user!.id, parsed.data);
+      const updated = setUserPreferences(req.user!.id, parsed.data as Partial<UserPreferences>);
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: "Failed to update preferences" });
