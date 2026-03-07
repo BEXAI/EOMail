@@ -14,9 +14,9 @@ interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
-  loginMutation: ReturnType<typeof useMutation>;
-  registerMutation: ReturnType<typeof useMutation>;
-  logoutMutation: ReturnType<typeof useMutation>;
+  loginMutation: any;
+  registerMutation: any;
+  logoutMutation: any;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);

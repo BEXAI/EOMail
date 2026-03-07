@@ -505,7 +505,7 @@ export default function MailPage() {
               <div
                 className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold cursor-pointer ml-1"
                 data-testid="avatar-user"
-                onClick={() => logoutMutation.mutate()}
+                onClick={() => logoutMutation.mutate(undefined)}
                 title={`${user?.displayName} — Click to sign out`}
               >
                 {user?.avatarInitials || "ME"}
