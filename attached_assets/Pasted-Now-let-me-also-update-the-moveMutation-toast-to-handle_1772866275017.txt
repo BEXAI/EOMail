@@ -1,0 +1,45 @@
+Now let me also update the moveMutation toast to handle custom folder names:
+
+Now let me restart and check logs:
+
+The app is running cleanly. Now let me update replit.md with the new features and run the tests:
+
+Also add the new API routes to replit.md:
+
+Also need to add the auto-organize endpoint to the AI routes in replit.md:
+
+Now let me run the e2e tests:
+
+All tests pass. Let me now run the architect review:
+
+Good catch — I need to fix the duplicate issue. Let me add a dedup mechanism:
+
+Now let me also add input validation on the folders endpoint using Zod:
+
+Everything is running cleanly. Here's what I built:
+
+Smart Folders & AI Auto-Organization Feature:
+
+Database: New custom_folders table with parent/child hierarchy support (id, userId, name, parentId, icon, color)
+
+Backend:
+
+GET /api/folders — Lists user's custom folders
+POST /api/folders — Creates a folder (Zod-validated: name 1-50 chars, icon, color)
+DELETE /api/folders/:id — Deletes a folder
+POST /api/ai/auto-organize — The core AI endpoint that:
+Fetches all inbox emails
+Classifies unprocessed ones via GPT-4o-mini (finance, scheduling, newsletter, action-required, social, notification)
+Creates category-named folders (Finance, Scheduling, Newsletters, Action Required, Social, Notifications)
+Copies each email into its category folder (custom:FolderName) while leaving the original in Inbox
+Deduplicates on repeated runs (won't create duplicate copies)
+Logs agent activity for sidebar tracking
+Sidebar UI:
+
+New Smart Folders section between system folders and labels
+When no custom folders exist: shows a dashed-border "Automate Emails Into Folders" button
+When folders exist: collapsible folder tree with category-specific icons (DollarSign for Finance, Calendar for Scheduling, Newspaper for Newsletters, etc.) and colors
+Supports nested parent/child folders with expand/collapse
+Shows email counts per folder
+Re-organize button stays visible at the bottom
+Deduplication: Uses a composite key (subject + fromEmail + timestamp) to prevent duplicate copies when the button is clicked multiple times.

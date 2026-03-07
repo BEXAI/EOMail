@@ -83,6 +83,7 @@ export default function MailPage() {
     queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
     queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
     queryClient.invalidateQueries({ queryKey: ["/api/ai/activity"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
   }, [queryClient]);
 
   const closeCompose = useCallback(() => {
@@ -168,8 +169,8 @@ export default function MailPage() {
     mutationFn: async (data: ComposeData & { draftId?: string }) => {
       const now = new Date();
       await apiRequest("POST", "/api/emails", {
-        from: user?.displayName || "You",
-        fromEmail: user?.email || "me@eomail.co",
+        from: user?.displayName || user?.username || "You",
+        fromEmail: user?.mailboxAddress || user?.email || "",
         to: data.to.split("@")[0] || data.to,
         toEmail: data.to,
         cc: data.cc || "",
@@ -213,8 +214,8 @@ export default function MailPage() {
         });
       } else {
         await apiRequest("POST", "/api/emails", {
-          from: user?.displayName || "You",
-          fromEmail: user?.email || "me@eomail.co",
+          from: user?.displayName || user?.username || "You",
+          fromEmail: user?.mailboxAddress || user?.email || "",
           to: data.to.split("@")[0] || data.to || "Draft",
           toEmail: data.to || "",
           cc: data.cc || "",

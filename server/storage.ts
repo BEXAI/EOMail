@@ -1,6 +1,6 @@
 import { type User, type InsertUser, type Email, type InsertEmail, type AgentActivity, type InsertAgentActivity, type CustomFolder, type InsertCustomFolder, users, emails, agentActivity, customFolders } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, ilike, desc, inArray, ne, sql, isNotNull } from "drizzle-orm";
+import { eq, and, or, ilike, desc, inArray, ne, not, like, sql, isNotNull } from "drizzle-orm";
 
 type EmailUpdates = Partial<Pick<Email, "read" | "starred" | "folder" | "labels" | "to" | "toEmail" | "cc" | "bcc" | "subject" | "body" | "preview" | "aiSummary" | "aiCategory" | "aiUrgency" | "aiSuggestedAction" | "aiDraftReply" | "aiSpamScore" | "aiSpamReason" | "aiProcessed">>;
 
@@ -88,6 +88,7 @@ export class DatabaseStorage implements IStorage {
       conditions.push(ne(emails.folder, "trash"));
       conditions.push(ne(emails.folder, "spam"));
       conditions.push(ne(emails.folder, "archive"));
+      conditions.push(not(like(emails.folder, "custom:%")));
     } else if (folder === "pending-approvals") {
       conditions.push(isNotNull(emails.aiDraftReply));
       conditions.push(ne(emails.folder, "sent"));

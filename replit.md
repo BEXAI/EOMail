@@ -67,6 +67,8 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
   - Displays folders in sidebar with category-specific icons and colors, nested expand/collapse support
   - Custom folders stored in `custom_folders` DB table with parent/child hierarchy
   - Emails in custom folders use `folder: "custom:FolderName"` convention
+  - Deduplication: repeated auto-organize runs skip emails already copied (keyed on subject+fromEmail+timestamp)
+  - "All Mail" view excludes `custom:` folder copies to prevent duplicate display
 - **Liquid UI**: Category-specific interactive micro-app cards in email detail:
   - Finance: extracted amounts, "Log to Accounting", "Auto-Archive"
   - Scheduling: meeting detection, "Accept & Add to Calendar", "Suggest Alternatives"

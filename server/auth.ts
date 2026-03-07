@@ -133,7 +133,7 @@ export function setupAuth(app: Express) {
         console.error("Failed to send verification email:", e)
       );
 
-      const { password: _, verificationToken: _vt, resetToken: _rt, ...safeUser } = user;
+      const { password: _, verificationToken: _vt, resetToken: _rt, resetTokenExpiry: _rte, ...safeUser } = user;
       req.login(safeUser as Express.User, (err) => {
         if (err) return next(err);
         res.status(201).json(safeUser);
