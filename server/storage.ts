@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Email, type InsertEmail, type AgentActivity, type InsertAgentActivity, type CustomFolder, type InsertCustomFolder, users, emails, agentActivity, customFolders } from "@shared/schema";
+import { type User, type InsertUser, type Email, type InsertEmail, type AgentActivity, type InsertAgentActivity, type CustomFolder, type InsertCustomFolder, type AiChatHistory, type InsertAiChatHistory, users, emails, agentActivity, customFolders, aiChatHistory } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, ilike, desc, inArray, ne, not, like, sql, isNotNull } from "drizzle-orm";
 
@@ -37,6 +37,10 @@ export interface IStorage {
   getCustomFolderByName(userId: string, name: string, parentId?: string | null): Promise<CustomFolder | undefined>;
   createCustomFolder(data: InsertCustomFolder): Promise<CustomFolder>;
   deleteCustomFolder(id: string, userId: string): Promise<boolean>;
+
+  getAiChatHistory(userId: string, emailId?: string | null): Promise<AiChatHistory[]>;
+  createAiChatHistoryMessage(data: InsertAiChatHistory): Promise<AiChatHistory>;
+  deleteAiChatHistoryForEmail(userId: string, emailId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -156,7 +160,7 @@ export class DatabaseStorage implements IStorage {
     if (updates.length === 0) return [];
 
     const ids = updates.map(u => u.id);
-    const allKeys = new Set(updates.flatMap(u => Object.keys(u.values)));
+    const allKeys = Array.from(new Set(updates.flatMap(u => Object.keys(u.values))));
 
     const caseStatements: Record<string, any> = { id: emails.id };
 
@@ -330,6 +334,35 @@ export class DatabaseStorage implements IStorage {
   async createEmails(emailsToInsert: InsertEmail[]): Promise<Email[]> {
     if (emailsToInsert.length === 0) return [];
     return db.insert(emails).values(emailsToInsert).returning();
+  }
+
+  async getAiChatHistory(userId: string, emailId?: string | null): Promise<AiChatHistory[]> {
+    const conditions = [eq(aiChatHistory.userId, userId)];
+
+    if (emailId) {
+      conditions.push(eq(aiChatHistory.emailId, emailId));
+    } else if (emailId === null) {
+      conditions.push(sql`${aiChatHistory.emailId} IS NULL`);
+    }
+
+    return db
+      .select()
+      .from(aiChatHistory)
+      .where(and(...conditions))
+      .orderBy(aiChatHistory.createdAt);
+  }
+
+  async createAiChatHistoryMessage(data: InsertAiChatHistory): Promise<AiChatHistory> {
+    const [message] = await db.insert(aiChatHistory).values(data).returning();
+    return message;
+  }
+
+  async deleteAiChatHistoryForEmail(userId: string, emailId: string): Promise<boolean> {
+    const result = await db
+      .delete(aiChatHistory)
+      .where(and(eq(aiChatHistory.userId, userId), eq(aiChatHistory.emailId, emailId)))
+      .returning();
+    return result.length > 0;
   }
 }
 
