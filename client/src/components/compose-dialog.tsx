@@ -329,25 +329,25 @@ export function ComposeDialog({ isOpen, onClose, onSend, onSaveDraft, onDiscardD
                   {isSending ? "Sending..." : "Send"}
                 </Button>
                 <div className="hidden md:flex items-center ml-1">
-                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Bold" data-testid="button-compose-bold">
+                  <Button size="icon" variant="ghost" className="h-8 w-8 opacity-40 cursor-not-allowed" disabled title="Coming soon" aria-label="Bold" data-testid="button-compose-bold">
                     <Bold className="w-4 h-4 text-muted-foreground" />
                   </Button>
-                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Italic" data-testid="button-compose-italic">
+                  <Button size="icon" variant="ghost" className="h-8 w-8 opacity-40 cursor-not-allowed" disabled title="Coming soon" aria-label="Italic" data-testid="button-compose-italic">
                     <Italic className="w-4 h-4 text-muted-foreground" />
                   </Button>
-                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Underline" data-testid="button-compose-underline">
+                  <Button size="icon" variant="ghost" className="h-8 w-8 opacity-40 cursor-not-allowed" disabled title="Coming soon" aria-label="Underline" data-testid="button-compose-underline">
                     <Underline className="w-4 h-4 text-muted-foreground" />
                   </Button>
-                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Insert link" data-testid="button-compose-link">
+                  <Button size="icon" variant="ghost" className="h-8 w-8 opacity-40 cursor-not-allowed" disabled title="Coming soon" aria-label="Insert link" data-testid="button-compose-link">
                     <Link className="w-4 h-4 text-muted-foreground" />
                   </Button>
-                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="List" data-testid="button-compose-list">
+                  <Button size="icon" variant="ghost" className="h-8 w-8 opacity-40 cursor-not-allowed" disabled title="Coming soon" aria-label="List" data-testid="button-compose-list">
                     <List className="w-4 h-4 text-muted-foreground" />
                   </Button>
-                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Attach file" data-testid="button-compose-attach">
+                  <Button size="icon" variant="ghost" className="h-8 w-8 opacity-40 cursor-not-allowed" disabled title="Coming soon" aria-label="Attach file" data-testid="button-compose-attach">
                     <Paperclip className="w-4 h-4 text-muted-foreground" />
                   </Button>
-                  <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Insert emoji" data-testid="button-compose-emoji">
+                  <Button size="icon" variant="ghost" className="h-8 w-8 opacity-40 cursor-not-allowed" disabled title="Coming soon" aria-label="Insert emoji" data-testid="button-compose-emoji">
                     <Smile className="w-4 h-4 text-muted-foreground" />
                   </Button>
                 </div>

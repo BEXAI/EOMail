@@ -74,6 +74,9 @@ export function AiCommandBar({ open, onOpenChange }: AiCommandBarProps) {
     onSuccess: (data) => {
       setResponse(data.response);
     },
+    onError: () => {
+      setResponse("Something went wrong. Please try again.");
+    },
   });
 
   const handleSubmit = (prompt: string) => {

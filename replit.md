@@ -106,6 +106,14 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - `POST /api/ai/approve/:id` — Approve and send AI draft
 - `POST /api/ai/reject/:id` — Reject AI draft
 
+## Security & Production Hardening
+
+- **Helmet**: Security headers (CSP, X-Frame-Options, X-Content-Type-Options, etc.) via `helmet` middleware in `server/index.ts`
+- **Rate Limiting**: `express-rate-limit` — auth endpoints: 10 req/15min per IP; all API routes: 100 req/min per IP
+- **Input Validation**: Zod schemas for PATCH email updates (strict mode, only known fields), bulk actions (ids array max 500, action enum), AI command prompt (max 500 chars)
+- **Error Handling**: All frontend mutations have `onError` callbacks with user-facing toast notifications
+- **Deployment**: Autoscale target, `npm run build` → `node dist/index.cjs`
+
 ## UX Polish
 
 - **Accessibility**: Email list items have `role="option"`, `tabIndex={0}`, focus-visible rings; compose dialog has `role="dialog"`, `aria-modal="true"`, `aria-label` on icon buttons; morning briefing urgent cards are keyboard navigable

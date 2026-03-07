@@ -20,11 +20,8 @@ import {
   Archive,
   Trash2,
   Reply,
-  ReplyAll,
-  Forward,
   MoreVertical,
   Paperclip,
-  Printer,
   ChevronDown,
   FolderInput,
   Inbox,
@@ -50,7 +47,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -142,7 +138,7 @@ function LiquidUICard({ email, onArchive }: { email: Email; onArchive: (id: stri
             </div>
           )}
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="text-xs gap-1.5 border-emerald-300 dark:border-emerald-700" data-testid="button-log-accounting">
+            <Button size="sm" variant="outline" className="text-xs gap-1.5 border-emerald-300 dark:border-emerald-700 opacity-50 cursor-not-allowed" disabled title="Coming soon" data-testid="button-log-accounting">
               <FileText className="w-3 h-3" /> Log to Accounting
             </Button>
             <Button size="sm" variant="ghost" className="text-xs gap-1.5" onClick={() => onArchive(email.id)} data-testid="button-auto-archive">
@@ -182,7 +178,7 @@ function LiquidUICard({ email, onArchive }: { email: Email; onArchive: (id: stri
             <Button size="sm" variant="outline" className="text-xs gap-1.5 border-blue-300 dark:border-blue-700" data-testid="button-accept-calendar">
               <Calendar className="w-3 h-3" /> Accept & Add to Calendar
             </Button>
-            <Button size="sm" variant="ghost" className="text-xs gap-1.5" data-testid="button-suggest-alternatives">
+            <Button size="sm" variant="ghost" className="text-xs gap-1.5 opacity-50 cursor-not-allowed" disabled title="Coming soon" data-testid="button-suggest-alternatives">
               <Clock className="w-3 h-3" /> Suggest Alternatives
             </Button>
           </div>
@@ -211,7 +207,7 @@ function LiquidUICard({ email, onArchive }: { email: Email; onArchive: (id: stri
             <Button size="sm" variant="ghost" className="text-xs gap-1.5" onClick={() => onArchive(email.id)} data-testid="button-archive-newsletter">
               <Archive className="w-3 h-3" /> Archive
             </Button>
-            <Button size="sm" variant="ghost" className="text-xs gap-1.5 text-muted-foreground" data-testid="button-unsubscribe">
+            <Button size="sm" variant="ghost" className="text-xs gap-1.5 text-muted-foreground opacity-50 cursor-not-allowed" disabled title="Coming soon" data-testid="button-unsubscribe">
               <X className="w-3 h-3" /> Unsubscribe
             </Button>
           </div>
@@ -242,7 +238,7 @@ function LiquidUICard({ email, onArchive }: { email: Email; onArchive: (id: stri
                 <Reply className="w-3 h-3" /> Quick Reply
               </Button>
             )}
-            <Button size="sm" variant="ghost" className="text-xs gap-1.5" data-testid="button-flag-action">
+            <Button size="sm" variant="ghost" className="text-xs gap-1.5 opacity-50 cursor-not-allowed" disabled title="Coming soon" data-testid="button-flag-action">
               <Star className="w-3 h-3" /> Flag for Later
             </Button>
           </div>
@@ -452,9 +448,6 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
               Analyze with AI
             </Button>
           )}
-          <Button size="icon" variant="ghost" data-testid="button-print">
-            <Printer className="w-4 h-4 text-muted-foreground" />
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="icon" variant="ghost" data-testid="button-more-options">
@@ -468,9 +461,6 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
               <DropdownMenuItem onClick={() => onStar(email.id, !email.starred)}>
                 {email.starred ? "Remove star" : "Add star"}
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Filter messages like this</DropdownMenuItem>
-              <DropdownMenuItem>Mute</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -654,28 +644,14 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
 
           {email.attachments > 0 && (
             <div className="mt-6 pt-4 border-t border-border">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2">
                 <Paperclip className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm font-medium text-muted-foreground">
                   {email.attachments} attachment{email.attachments > 1 ? "s" : ""}
                 </span>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                {Array.from({ length: email.attachments }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 bg-muted rounded-md px-3 py-2 hover-elevate cursor-pointer"
-                    data-testid={`attachment-${i}`}
-                  >
-                    <div className="w-8 h-8 bg-primary/10 rounded flex items-center justify-center">
-                      <Paperclip className="w-3.5 h-3.5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-foreground">Document_{i + 1}.pdf</p>
-                      <p className="text-xs text-muted-foreground">245 KB</p>
-                    </div>
-                  </div>
-                ))}
+                <span className="text-xs text-muted-foreground/60" data-testid="attachment-note">
+                  (attachment preview not available)
+                </span>
               </div>
             </div>
           )}
@@ -774,14 +750,6 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
           >
             <Reply className="w-4 h-4" />
             Reply
-          </Button>
-          <Button variant="outline" className="gap-2" data-testid="button-reply-all">
-            <ReplyAll className="w-4 h-4" />
-            Reply all
-          </Button>
-          <Button variant="outline" className="gap-2" data-testid="button-forward">
-            <Forward className="w-4 h-4" />
-            Forward
           </Button>
         </div>
       </div>

@@ -1,12 +1,58 @@
 import type { Express } from "express";
 import { type Server } from "http";
+import rateLimit from "express-rate-limit";
+import { z } from "zod";
 import { storage } from "./storage";
 import { insertEmailSchema } from "@shared/schema";
 import { requireAuth } from "./auth";
 import { processEmail, processAllUnprocessed } from "./ai-pipeline";
 import { draftReply, generateBriefing, handleAiCommand } from "./ai";
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: "Too many attempts, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: "Too many requests, please slow down" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const emailUpdateSchema = z.object({
+  read: z.boolean().optional(),
+  starred: z.boolean().optional(),
+  folder: z.string().optional(),
+  labels: z.array(z.string()).optional(),
+  to: z.string().optional(),
+  toEmail: z.string().optional(),
+  cc: z.string().optional(),
+  bcc: z.string().optional(),
+  subject: z.string().optional(),
+  body: z.string().optional(),
+  preview: z.string().optional(),
+}).strict();
+
+const bulkActionSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+  action: z.enum(["update", "delete"]),
+  updates: z.object({
+    read: z.boolean().optional(),
+    starred: z.boolean().optional(),
+    folder: z.string().optional(),
+    labels: z.array(z.string()).optional(),
+  }).strict().optional(),
+});
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  app.use("/api/", apiLimiter);
+  app.use("/api/auth/login", authLimiter);
+  app.use("/api/auth/register", authLimiter);
   app.get("/api/emails", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
@@ -60,7 +106,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/emails/:id", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
-      const updated = await storage.updateEmail(req.params.id, userId, req.body);
+      const parsed = emailUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid update fields", details: parsed.error.issues });
+      const updated = await storage.updateEmail(req.params.id, userId, parsed.data);
       if (!updated) return res.status(404).json({ error: "Email not found" });
       res.json(updated);
     } catch (e) {
@@ -71,14 +119,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/emails/bulk", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
-      const { ids, action, updates } = req.body as {
-        ids: string[];
-        action: "update" | "delete";
-        updates?: Partial<any>;
-      };
-      if (!ids || !Array.isArray(ids) || !action) {
-        return res.status(400).json({ error: "ids and action required" });
-      }
+      const parsed = bulkActionSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid bulk action", details: parsed.error.issues });
+      const { ids, action, updates } = parsed.data;
       if (action === "delete") {
         const count = await storage.deleteEmails(ids, userId);
         return res.json({ deleted: count });
@@ -193,6 +236,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = req.user!.id;
       const { prompt } = req.body;
       if (!prompt) return res.status(400).json({ error: "prompt is required" });
+      if (typeof prompt !== "string" || prompt.length > 500) return res.status(400).json({ error: "prompt must be a string of 500 characters or less" });
       const recentEmails = await storage.getEmails(userId, "all");
       const response = await handleAiCommand(prompt, recentEmails);
       res.json({ response });

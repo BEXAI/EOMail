@@ -107,6 +107,7 @@ export default function MailPage() {
         setSelectedEmail((prev) => prev ? { ...prev, read } : null);
       }
     },
+    onError: () => { toast({ title: "Failed to update", variant: "destructive" }); },
   });
 
   const starMutation = useMutation({
@@ -119,6 +120,7 @@ export default function MailPage() {
         setSelectedEmail((prev) => prev ? { ...prev, starred } : null);
       }
     },
+    onError: () => { toast({ title: "Failed to star email", variant: "destructive" }); },
   });
 
   const deleteMutation = useMutation({
@@ -134,6 +136,7 @@ export default function MailPage() {
       if (selectedEmail?.id === id) setSelectedEmail(null);
       toast({ title: folder === "trash" ? "Email deleted permanently" : "Moved to trash" });
     },
+    onError: () => { toast({ title: "Failed to delete", variant: "destructive" }); },
   });
 
   const moveMutation = useMutation({
@@ -145,6 +148,7 @@ export default function MailPage() {
       if (selectedEmail?.id === id) setSelectedEmail(null);
       toast({ title: `Moved to ${FOLDER_LABELS[targetFolder] || targetFolder}` });
     },
+    onError: () => { toast({ title: "Failed to move email", variant: "destructive" }); },
   });
 
   const archiveMutation = useMutation({
@@ -156,6 +160,7 @@ export default function MailPage() {
       if (selectedEmail?.id === id) setSelectedEmail(null);
       toast({ title: "Archived" });
     },
+    onError: () => { toast({ title: "Failed to archive", variant: "destructive" }); },
   });
 
   const sendMutation = useMutation({
@@ -262,6 +267,7 @@ export default function MailPage() {
       };
       toast({ title: messages[action] || "Done" });
     },
+    onError: () => { toast({ title: "Bulk action failed", variant: "destructive" }); },
   });
 
   const handleSelectEmail = useCallback((email: Email) => {
@@ -319,6 +325,7 @@ export default function MailPage() {
       invalidateAll();
       toast({ title: "Draft discarded" });
     },
+    onError: () => { toast({ title: "Failed to discard draft", variant: "destructive" }); },
   });
 
   const handleDiscardDraft = useCallback((draftId: string) => {
