@@ -44,9 +44,14 @@ interface EmailListProps {
 }
 
 function highlightText(text: string, search: string): string {
-  if (!search) return text;
+  if (!search) return escapeHtml(text);
+  const escaped = escapeHtml(text);
   const regex = new RegExp(`(${search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
-  return text.replace(regex, "<mark class='bg-yellow-200 dark:bg-yellow-800 rounded-sm px-0.5'>$1</mark>");
+  return escaped.replace(regex, "<mark class='bg-yellow-200 dark:bg-yellow-800 rounded-sm px-0.5'>$1</mark>");
+}
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 const urgencyDotColors: Record<string, string> = {
