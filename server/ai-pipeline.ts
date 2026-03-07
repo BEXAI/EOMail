@@ -60,7 +60,7 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
       classification.suggestedAction === "reply" &&
       email.fromEmail !== "me@eomail.co"
     ) {
-      aiDraftReplyText = await draftReply(email, displayName);
+      aiDraftReplyText = await draftReply(email, displayName, undefined, userId);
     }
 
     const spamReasonWithMeta = JSON.stringify({

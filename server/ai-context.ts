@@ -9,6 +9,7 @@ interface CachedContext {
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_CONTEXT_EMAILS = 20;
+const MAX_CONTEXT_CHARS = 14000;
 
 class EmailContextIndex {
   private cache = new Map<string, CachedContext>();
@@ -28,6 +29,21 @@ class EmailContextIndex {
     return contextString;
   }
 
+  async getContextWithCount(userId: string): Promise<{ context: string; count: number }> {
+    const cached = this.cache.get(userId);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return { context: cached.contextString, count: cached.emailCount };
+    }
+    const emails = await storage.getEmails(userId, "all");
+    const contextString = this.buildContext(emails);
+    this.cache.set(userId, {
+      contextString,
+      emailCount: emails.length,
+      timestamp: Date.now(),
+    });
+    return { context: contextString, count: emails.length };
+  }
+
   invalidate(userId: string): void {
     this.cache.delete(userId);
   }
@@ -36,40 +52,24 @@ class EmailContextIndex {
     const recent = emails.slice(0, MAX_CONTEXT_EMAILS);
     if (recent.length === 0) return "(inbox is empty)";
 
-    return recent.map((e, i) => {
+    const lines: string[] = [];
+    let totalChars = 0;
+
+    for (let i = 0; i < recent.length; i++) {
+      const e = recent[i];
       const status = e.read ? "read" : "unread";
       const star = e.starred ? ", \u2605" : "";
       const category = e.aiCategory ? `[${e.aiCategory}]` : "";
       const urgency = e.aiUrgency ? `(${e.aiUrgency})` : "";
       const summary = e.aiSummary || e.preview || "";
-      return `${i + 1}. [${status}${star}] ${category}${urgency} From: ${e.from} <${e.fromEmail}> — "${e.subject}" | ${summary.slice(0, 150)}`;
-    }).join("\n");
-  }
+      const line = `${i + 1}. [${status}${star}] ${category}${urgency} From: ${e.from} <${e.fromEmail}> — "${e.subject}" | ${summary.slice(0, 150)}`;
 
-  compressThread(emails: Email[]): string {
-    if (emails.length === 0) return "(no emails)";
-    const verbatimCount = 3;
-    const parts: string[] = [];
-
-    if (emails.length > verbatimCount) {
-      const older = emails.slice(verbatimCount);
-      const summaryLines = older.map((e) => {
-        const summary = e.aiSummary || e.preview || "";
-        return `[${e.from}] ${e.subject}: ${summary.slice(0, 100)}`;
-      });
-      parts.push(`--- ${older.length} earlier messages (summarized) ---`);
-      parts.push(summaryLines.join("\n"));
-      parts.push("--- Recent messages (verbatim) ---");
+      if (totalChars + line.length > MAX_CONTEXT_CHARS) break;
+      lines.push(line);
+      totalChars += line.length;
     }
 
-    const recent = emails.slice(0, verbatimCount);
-    for (const e of recent) {
-      const plainBody = e.body.replace(/<[^>]*>/g, "").trim().slice(0, 1500);
-      parts.push(`From: ${e.from} <${e.fromEmail}>\nSubject: ${e.subject}\nDate: ${e.timestamp.toISOString()}\n\n${plainBody}`);
-      parts.push("---");
-    }
-
-    return parts.join("\n");
+    return lines.join("\n");
   }
 
   getStats(): { cacheSize: number; entries: { userId: string; emailCount: number; ageMs: number }[] } {

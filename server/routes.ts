@@ -215,7 +215,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const email = await storage.getEmail(req.params.id, userId);
       if (!email) return res.status(404).json({ error: "Email not found" });
       const tone = req.body?.tone as string | undefined;
-      const draft = await draftReply(email, req.user!.displayName, tone);
+      const draft = await draftReply(email, req.user!.displayName, tone, userId);
       const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: draft });
       res.json(updated);
     } catch (e) {
@@ -301,8 +301,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         validated.push({ role: msg.role, content: msg.content.slice(0, 2000) });
       }
-      const emailContext = await emailContextIndex.getContext(userId);
-      const response = await handleAiChat(validated, emailContext);
+      const { context: emailContext, count: emailCount } = await emailContextIndex.getContextWithCount(userId);
+      const response = await handleAiChat(validated, emailContext, emailCount);
       res.json({ response });
     } catch (e) {
       console.error("AI chat error:", e);
@@ -653,7 +653,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         recipientName,
         recipientCompany,
         user.displayName,
-        relationship || "unknown"
+        relationship || "unknown",
+        user.id
       );
 
       res.json({ draft: expanded });

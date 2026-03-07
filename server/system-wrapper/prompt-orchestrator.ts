@@ -2,6 +2,7 @@ import type { UserPreferences } from "./context-manager";
 
 export type TaskType =
   | "smart_reply"
+  | "summarize_email"
   | "thread_summarizer"
   | "draft_expander"
   | "classify"
@@ -14,6 +15,7 @@ export type TaskComplexity = "simple" | "complex";
 
 const TASK_COMPLEXITY_MAP: Record<TaskType, TaskComplexity> = {
   smart_reply: "simple",
+  summarize_email: "simple",
   thread_summarizer: "simple",
   draft_expander: "simple",
   classify: "simple",
@@ -72,6 +74,27 @@ Tone: ${toneDesc}.${jargonNote}
 Write a concise, ready-to-send reply that directly addresses the email content.
 Do NOT include subject lines or email headers.${signatureNote}`,
     userPrompt: `Email thread:\n${inputs.email_thread_context}\n\nUser intent: ${inputs.user_intent}\n\nDraft the reply now.`,
+  };
+}
+
+export interface SummarizeEmailInputs {
+  subject: string;
+  body_plain: string;
+}
+
+export function buildSummarizeEmailPrompt(
+  inputs: SummarizeEmailInputs
+): PromptResult {
+  return {
+    taskType: "summarize_email",
+    complexity: "simple",
+    temperature: 0.2,
+    maxTokens: 150,
+    systemPrompt: `You are an email summarizer for EOMail.co.
+Write a 1-2 sentence summary capturing the core message, key ask, or main information.
+Be specific — include names, dates, and amounts when mentioned.
+Do NOT use bullet points, headers, or formatting. Plain prose only.`,
+    userPrompt: `Subject: ${inputs.subject}\n\n${inputs.body_plain}`,
   };
 }
 

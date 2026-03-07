@@ -1,0 +1,20 @@
+ystem Wrapper v2 — a complete architecture layer that optimizes every LLM API call:
+
+Context Manager (server/system-wrapper/context-manager.ts) — Thread compression with rolling window (3 most recent verbatim, older ones summarized), metadata injection for situational awareness, and per-user preference store (tone, signature, formality level, jargon toggle).
+
+Prompt Orchestrator (server/system-wrapper/prompt-orchestrator.ts) — Task-specific prompt templates with tuned temperatures and token budgets for each function (classify: 150 tokens, summarize: 300, draft reply: 500, briefing: 400, commands: 500, chat: 2048). Routes tasks by complexity (simple vs complex).
+
+API Gateway (server/system-wrapper/api-gateway.ts) — Model routing (gpt-4o-mini for simple tasks, gpt-4o for complex), exponential backoff retry (3 attempts), automatic fallback chaining (gpt-4o → gpt-4o-mini if primary fails), and 15-second timeout enforcement.
+
+Security Layer (server/system-wrapper/security.ts) — PII redaction before API transmission: credit cards, SSNs, passwords, API keys, and bank accounts are scrubbed from both user and system prompts.
+
+Email Context Index Cache (server/ai-context.ts) — Per-user in-memory cache with 5-minute TTL, invalidated on every email mutation (create, update, delete, bulk, approve, reject, auto-organize, inbound webhook). Eliminates redundant getEmails(userId, "all") DB calls across chat, command, and briefing endpoints.
+
+Pipeline Optimization (server/ai-pipeline.ts) — processAllUnprocessed now passes pre-fetched email objects directly, eliminating redundant DB re-fetches during batch processing.
+
+New API Endpoints:
+
+POST /api/ai/expand-draft — Turns shorthand notes into full professional emails
+GET /api/user/preferences — Retrieve AI behavior settings
+POST /api/user/preferences — Update tone, signature, formality, jargon preferences
+Token savings: max_completion_tokens reduced from a blanket 8192 across all functions down to 150–2048 per task, with appropriate limits for each function's output size.

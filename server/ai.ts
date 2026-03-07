@@ -6,7 +6,7 @@ import {
 } from "./system-wrapper/context-manager";
 import {
   buildSmartReplyPrompt,
-  buildThreadSummarizerPrompt,
+  buildSummarizeEmailPrompt,
   buildClassifyPrompt,
   buildSpamAnalysisPrompt,
   buildMorningBriefingPrompt,
@@ -33,8 +33,9 @@ export async function summarizeEmail(
 ): Promise<string> {
   try {
     const plainBody = stripHtml(body).slice(0, 2000);
-    const prompt = buildThreadSummarizerPrompt({
-      email_thread_context: `Subject: ${subject}\n\n${plainBody}`,
+    const prompt = buildSummarizeEmailPrompt({
+      subject,
+      body_plain: plainBody,
     });
     const response = await executePrompt(prompt);
     return response.content;
@@ -77,10 +78,12 @@ export async function classifyEmail(
 export async function draftReply(
   originalEmail: Email,
   userDisplayName: string,
-  tone?: string
+  tone?: string,
+  userId?: string
 ): Promise<string> {
   try {
-    const prefs = getUserPreferences(userDisplayName);
+    const prefsKey = userId || userDisplayName;
+    const prefs = getUserPreferences(prefsKey);
     const effectiveTone = (tone as typeof prefs.default_tone) || prefs.default_tone;
     const emailContext = buildEmailContext(originalEmail, userDisplayName);
 
@@ -220,10 +223,12 @@ export async function expandDraft(
   recipientName: string,
   recipientCompany: string | undefined,
   userDisplayName: string,
-  relationship: "client" | "colleague" | "vendor" | "unknown" = "unknown"
+  relationship: "client" | "colleague" | "vendor" | "unknown" = "unknown",
+  userId?: string
 ): Promise<string> {
   try {
-    const prefs = getUserPreferences(userDisplayName);
+    const prefsKey = userId || userDisplayName;
+    const prefs = getUserPreferences(prefsKey);
     const prompt = buildDraftExpanderPrompt({
       shorthand_notes: shorthandNotes,
       recipient_metadata: {

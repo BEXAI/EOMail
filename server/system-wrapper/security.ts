@@ -1,29 +1,32 @@
-import type { Email } from "@shared/schema";
-
-const PII_PATTERNS: Array<{ name: string; regex: RegExp; replacement: string }> = [
+const PII_PATTERN_DEFS: Array<{ name: string; source: string; flags: string; replacement: string }> = [
   {
     name: "credit_card",
-    regex: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b/g,
+    source: "\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\\b",
+    flags: "g",
     replacement: "[REDACTED:CREDIT_CARD]",
   },
   {
     name: "ssn",
-    regex: /\b(?!000|666|9\d{2})\d{3}[-\s]?(?!00)\d{2}[-\s]?(?!0000)\d{4}\b/g,
+    source: "\\b(?!000|666|9\\d{2})\\d{3}[-\\s]?(?!00)\\d{2}[-\\s]?(?!0000)\\d{4}\\b",
+    flags: "g",
     replacement: "[REDACTED:SSN]",
   },
   {
     name: "password",
-    regex: /\b(?:password|passwd|pwd|pass)[\s:=]+\S+/gi,
+    source: "\\b(?:password|passwd|pwd|pass)[\\s:=]+\\S+",
+    flags: "gi",
     replacement: "[REDACTED:PASSWORD]",
   },
   {
     name: "api_key",
-    regex: /\b(?:sk-|pk-|Bearer\s+)[A-Za-z0-9_\-]{20,}\b/g,
+    source: "\\b(?:sk-|pk-|Bearer\\s+)[A-Za-z0-9_\\-]{20,}\\b",
+    flags: "g",
     replacement: "[REDACTED:API_KEY]",
   },
   {
     name: "bank_account",
-    regex: /\b(?:account|acct|routing)[\s#:]+\d{8,17}\b/gi,
+    source: "\\b(?:account|acct|routing)[\\s#:]+\\d{8,17}\\b",
+    flags: "gi",
     replacement: "[REDACTED:BANK_ACCOUNT]",
   },
 ];
@@ -35,11 +38,13 @@ export function redactPII(text: string): {
   let sanitized = text;
   const redactions: Array<{ type: string; count: number }> = [];
 
-  for (const pattern of PII_PATTERNS) {
-    const matches = sanitized.match(pattern.regex);
+  for (const def of PII_PATTERN_DEFS) {
+    const regex = new RegExp(def.source, def.flags);
+    const matches = sanitized.match(regex);
     if (matches && matches.length > 0) {
-      redactions.push({ type: pattern.name, count: matches.length });
-      sanitized = sanitized.replace(pattern.regex, pattern.replacement);
+      redactions.push({ type: def.name, count: matches.length });
+      const replaceRegex = new RegExp(def.source, def.flags);
+      sanitized = sanitized.replace(replaceRegex, def.replacement);
     }
   }
 

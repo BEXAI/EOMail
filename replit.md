@@ -111,12 +111,12 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - `client/src/components/ai-command-bar.tsx` - Agent-grouped AI Action Center (Cmd+K)
 - `client/src/components/ai-chat-panel.tsx` - Persistent AI chat panel (bottom 1/3, glass morphism, multi-turn)
 - `server/ai.ts` - AI service layer (System Wrapper v2) — routes all LLM calls through Context Manager → Prompt Orchestrator → API Gateway → Security Layer
-- `server/ai-context.ts` - Per-user email context index cache (TTL 5min, max 20 emails, invalidated on mutations)
+- `server/ai-context.ts` - Per-user email context index cache (TTL 5min, max 20 emails, 14K char token budget, invalidated on mutations; getContextWithCount provides email count for chat)
 - `server/ai-pipeline.ts` - AI processing pipeline with named agent assignments, accepts preloaded emails to avoid redundant fetches
-- `server/system-wrapper/security.ts` - PII redaction (credit cards, SSN, passwords, API keys, bank accounts) before API calls
+- `server/system-wrapper/security.ts` - PII redaction (credit cards, SSN, passwords, API keys, bank accounts) before API calls; fresh regex instances per call to prevent stateful /g bugs
 - `server/system-wrapper/context-manager.ts` - Thread compression (rolling window), metadata injection, user preference store (tone, signature, formality)
-- `server/system-wrapper/prompt-orchestrator.ts` - Task-specific prompt templates with complexity routing (simple→gpt-4o-mini, complex→gpt-4o)
-- `server/system-wrapper/api-gateway.ts` - Model routing, exponential backoff retry (3x), fallback chaining (gpt-4o→gpt-4o-mini), 15s timeout, PII sanitization
+- `server/system-wrapper/prompt-orchestrator.ts` - Task-specific prompt templates with complexity routing (simple→gpt-4o-mini, complex→gpt-4o); separate summarize_email (1-2 sentence) and thread_summarizer (structured) prompts
+- `server/system-wrapper/api-gateway.ts` - Model routing, exponential backoff retry (3x), fallback chaining (gpt-4o→gpt-4o-mini), 15s timeout, PII sanitization, structured observability logging (task/model/latency/tokens/fallback)
 - `server/email.ts` - Resend SDK email service (send, password reset, verification emails)
 - `server/routes.ts` - API routes including AI endpoints, inbound webhook
 - `server/storage.ts` - DatabaseStorage with user lookup methods (by email, reset token, verification token, mailbox)

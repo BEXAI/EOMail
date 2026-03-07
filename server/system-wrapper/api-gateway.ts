@@ -131,6 +131,7 @@ export async function executePrompt(
 ): Promise<GatewayResponse> {
   const primaryModel =
     promptResult.complexity === "complex" ? MODELS.complex : MODELS.simple;
+  const startTime = Date.now();
 
   try {
     const content = await callOpenAI({
@@ -142,6 +143,10 @@ export async function executePrompt(
       jsonMode: options?.jsonMode,
     });
 
+    const latencyMs = Date.now() - startTime;
+    const estTokens = Math.ceil(content.length / 4);
+    console.log(`[API Gateway] task=${promptResult.taskType} model=${primaryModel} latency=${latencyMs}ms est_tokens=${estTokens} fallback=false`);
+
     return {
       content,
       model: primaryModel,
@@ -150,13 +155,14 @@ export async function executePrompt(
     };
   } catch (primaryError) {
     console.error(
-      `[API Gateway] Primary model (${primaryModel}) failed:`,
+      `[API Gateway] Primary model (${primaryModel}) failed after ${Date.now() - startTime}ms:`,
       primaryError instanceof Error ? primaryError.message : primaryError
     );
   }
 
   if (primaryModel !== MODELS.fallback) {
-    console.log(`[API Gateway] Falling back to ${MODELS.fallback}...`);
+    console.log(`[API Gateway] Falling back to ${MODELS.fallback} for task=${promptResult.taskType}...`);
+    const fallbackStart = Date.now();
     try {
       const content = await callOpenAI({
         systemPrompt: promptResult.systemPrompt,
@@ -167,6 +173,10 @@ export async function executePrompt(
         jsonMode: options?.jsonMode,
       });
 
+      const latencyMs = Date.now() - fallbackStart;
+      const estTokens = Math.ceil(content.length / 4);
+      console.log(`[API Gateway] task=${promptResult.taskType} model=${MODELS.fallback} latency=${latencyMs}ms est_tokens=${estTokens} fallback=true`);
+
       return {
         content,
         model: MODELS.fallback,
@@ -175,14 +185,14 @@ export async function executePrompt(
       };
     } catch (fallbackError) {
       console.error(
-        `[API Gateway] Fallback model also failed:`,
+        `[API Gateway] Fallback model also failed after ${Date.now() - fallbackStart}ms:`,
         fallbackError instanceof Error ? fallbackError.message : fallbackError
       );
     }
   }
 
   throw new Error(
-    `[API Gateway] All models failed for task: ${promptResult.taskType}`
+    `[API Gateway] All models failed for task: ${promptResult.taskType} (total ${Date.now() - startTime}ms)`
   );
 }
 
@@ -204,6 +214,7 @@ export async function executeMultiTurnChat(
   maxTokens: number = 2048
 ): Promise<string> {
   const client = getClient();
+  const startTime = Date.now();
 
   let totalRedactions = 0;
   for (const msg of messages) {
@@ -232,6 +243,9 @@ export async function executeMultiTurnChat(
 
       const content = response.choices[0]?.message?.content?.trim();
       if (!content) throw new Error("Empty response from LLM");
+      const latencyMs = Date.now() - startTime;
+      const estTokens = Math.ceil(content.length / 4);
+      console.log(`[API Gateway] task=ai_chat model=${MODELS.complex} latency=${latencyMs}ms est_tokens=${estTokens} turns=${messages.length} fallback=false`);
       return content;
     } catch (error) {
       lastError = error;
@@ -251,6 +265,7 @@ export async function executeMultiTurnChat(
 
   if (MODELS.complex !== MODELS.fallback) {
     console.log(`[API Gateway] Chat falling back to ${MODELS.fallback}...`);
+    const fallbackStart = Date.now();
     try {
       const response = await withTimeout(
         client.chat.completions.create({
@@ -260,13 +275,16 @@ export async function executeMultiTurnChat(
         }),
         RETRY_CONFIG.timeout_ms
       );
-      return response.choices[0]?.message?.content?.trim() || "";
+      const content = response.choices[0]?.message?.content?.trim() || "";
+      const latencyMs = Date.now() - fallbackStart;
+      console.log(`[API Gateway] task=ai_chat model=${MODELS.fallback} latency=${latencyMs}ms turns=${messages.length} fallback=true`);
+      return content;
     } catch {
-      // fall through
+      console.error(`[API Gateway] Chat fallback also failed after ${Date.now() - fallbackStart}ms`);
     }
   }
 
   throw lastError instanceof Error
     ? lastError
-    : new Error("Chat API call failed after all retries");
+    : new Error(`Chat API call failed after all retries (total ${Date.now() - startTime}ms)`);
 }
