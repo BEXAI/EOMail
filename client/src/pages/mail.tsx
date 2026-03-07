@@ -146,7 +146,8 @@ export default function MailPage() {
     onSuccess: (_, { id, targetFolder }) => {
       invalidateAll();
       if (selectedEmail?.id === id) setSelectedEmail(null);
-      toast({ title: `Moved to ${FOLDER_LABELS[targetFolder] || targetFolder}` });
+      const folderLabel = targetFolder.startsWith("custom:") ? targetFolder.replace("custom:", "") : (FOLDER_LABELS[targetFolder] || targetFolder);
+      toast({ title: `Moved to ${folderLabel}` });
     },
     onError: () => { toast({ title: "Failed to move email", variant: "destructive" }); },
   });
@@ -475,7 +476,9 @@ export default function MailPage() {
 
   const headerTitle = labelFilter
     ? `Label: ${labelFilter.charAt(0).toUpperCase() + labelFilter.slice(1)}`
-    : FOLDER_LABELS[folder] || folder;
+    : folder.startsWith("custom:")
+      ? folder.replace("custom:", "")
+      : FOLDER_LABELS[folder] || folder;
 
   const emailActions = {
     onStar: (id: string, starred: boolean) => starMutation.mutate({ id, starred }),

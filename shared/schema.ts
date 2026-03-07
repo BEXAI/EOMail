@@ -65,6 +65,23 @@ export const agentActivity = pgTable("agent_activity", {
   index("agent_activity_user_idx").on(table.userId),
 ]);
 
+export const customFolders = pgTable("custom_folders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  parentId: varchar("parent_id"),
+  icon: text("icon").default("folder"),
+  color: text("color").default("blue"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("custom_folders_user_idx").on(table.userId),
+  index("custom_folders_parent_idx").on(table.parentId),
+]);
+
+export const insertCustomFolderSchema = createInsertSchema(customFolders).omit({ id: true, createdAt: true });
+export type InsertCustomFolder = z.infer<typeof insertCustomFolderSchema>;
+export type CustomFolder = typeof customFolders.$inferSelect;
+
 export const insertEmailSchema = createInsertSchema(emails).omit({ id: true, createdAt: true });
 export type InsertEmail = z.infer<typeof insertEmailSchema>;
 export type Email = typeof emails.$inferSelect;

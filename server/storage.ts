@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Email, type InsertEmail, type AgentActivity, type InsertAgentActivity, users, emails, agentActivity } from "@shared/schema";
+import { type User, type InsertUser, type Email, type InsertEmail, type AgentActivity, type InsertAgentActivity, type CustomFolder, type InsertCustomFolder, users, emails, agentActivity, customFolders } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, ilike, desc, inArray, ne, sql, isNotNull } from "drizzle-orm";
 
@@ -29,6 +29,12 @@ export interface IStorage {
   getAgentActivity(userId: string): Promise<AgentActivity[]>;
   createAgentActivity(data: InsertAgentActivity): Promise<AgentActivity>;
   updateAgentActivity(id: string, userId: string, updates: Partial<AgentActivity>): Promise<AgentActivity | undefined>;
+
+  getCustomFolders(userId: string): Promise<CustomFolder[]>;
+  getCustomFolder(id: string, userId: string): Promise<CustomFolder | undefined>;
+  getCustomFolderByName(userId: string, name: string, parentId?: string | null): Promise<CustomFolder | undefined>;
+  createCustomFolder(data: InsertCustomFolder): Promise<CustomFolder>;
+  deleteCustomFolder(id: string, userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -200,6 +206,9 @@ export class DatabaseStorage implements IStorage {
       if (row.folder === "trash") counts.trash++;
       if (row.folder !== "trash" && row.folder !== "spam" && row.folder !== "archive") counts.all++;
       if (row.hasDraft && row.folder !== "sent" && row.folder !== "trash") counts["pending-approvals"]++;
+      if (row.folder.startsWith("custom:")) {
+        counts[row.folder] = (counts[row.folder] || 0) + 1;
+      }
     }
 
     return counts;
@@ -235,6 +244,51 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(agentActivity.id, id), eq(agentActivity.userId, userId)))
       .returning();
     return activity;
+  }
+
+  async getCustomFolders(userId: string): Promise<CustomFolder[]> {
+    return db
+      .select()
+      .from(customFolders)
+      .where(eq(customFolders.userId, userId))
+      .orderBy(customFolders.name);
+  }
+
+  async getCustomFolder(id: string, userId: string): Promise<CustomFolder | undefined> {
+    const [folder] = await db
+      .select()
+      .from(customFolders)
+      .where(and(eq(customFolders.id, id), eq(customFolders.userId, userId)))
+      .limit(1);
+    return folder;
+  }
+
+  async getCustomFolderByName(userId: string, name: string, parentId?: string | null): Promise<CustomFolder | undefined> {
+    const conditions = [eq(customFolders.userId, userId), eq(customFolders.name, name)];
+    if (parentId) {
+      conditions.push(eq(customFolders.parentId, parentId));
+    } else {
+      conditions.push(sql`${customFolders.parentId} IS NULL`);
+    }
+    const [folder] = await db
+      .select()
+      .from(customFolders)
+      .where(and(...conditions))
+      .limit(1);
+    return folder;
+  }
+
+  async createCustomFolder(data: InsertCustomFolder): Promise<CustomFolder> {
+    const [folder] = await db.insert(customFolders).values(data).returning();
+    return folder;
+  }
+
+  async deleteCustomFolder(id: string, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(customFolders)
+      .where(and(eq(customFolders.id, id), eq(customFolders.userId, userId)))
+      .returning();
+    return result.length > 0;
   }
 
   async seedEmailsForUser(userId: string): Promise<void> {

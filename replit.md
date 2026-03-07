@@ -60,6 +60,13 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 ### AI Features
 - **Morning Briefing Dashboard**: "Chief of Staff" briefing with personalized greeting, stats cards, agent activity summary (per-agent task counts with icons), urgent emails list, "Process All with AI" button
 - **AI Action Center (Cmd+K)**: Agent-grouped command suggestions (FinOps, Chrono, Aegis, EOMail), command history (localStorage), inline AI response
+- **Smart Folders & Auto-Organization**: AI-powered "Automate Emails Into Folders" button that:
+  - Classifies each inbox email using GPT-4o-mini (finance, scheduling, newsletter, action-required, social, notification)
+  - Creates category-named folders (Finance, Scheduling, Newsletters, Action Required, Social, Notifications)
+  - Copies emails into their category folder while keeping originals in Inbox
+  - Displays folders in sidebar with category-specific icons and colors, nested expand/collapse support
+  - Custom folders stored in `custom_folders` DB table with parent/child hierarchy
+  - Emails in custom folders use `folder: "custom:FolderName"` convention
 - **Liquid UI**: Category-specific interactive micro-app cards in email detail:
   - Finance: extracted amounts, "Log to Accounting", "Auto-Archive"
   - Scheduling: meeting detection, "Accept & Add to Calendar", "Suggest Alternatives"
@@ -129,6 +136,12 @@ Each agent activity is logged with agent name, displayed in sidebar with distinc
 - `POST /api/ai/command` — Natural language command
 - `POST /api/ai/approve/:id` — Approve and send AI draft (sends via Resend)
 - `POST /api/ai/reject/:id` — Reject AI draft
+- `POST /api/ai/auto-organize` — AI-powered auto-organize: classifies inbox emails and copies them into category folders
+
+### Custom Folders
+- `GET /api/folders` — List user's custom folders
+- `POST /api/folders` — Create custom folder (name, parentId, icon, color)
+- `DELETE /api/folders/:id` — Delete custom folder
 
 ### Inbound
 - `POST /api/email/inbound` — Webhook for incoming emails (no auth, maps to user by mailbox)

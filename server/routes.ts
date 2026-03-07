@@ -3,10 +3,10 @@ import { type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { storage } from "./storage";
-import { insertEmailSchema } from "@shared/schema";
+import { insertEmailSchema, type InsertEmail } from "@shared/schema";
 import { requireAuth } from "./auth";
 import { processEmail, processAllUnprocessed } from "./ai-pipeline";
-import { draftReply, generateBriefing, handleAiCommand } from "./ai";
+import { draftReply, generateBriefing, handleAiCommand, classifyEmail } from "./ai";
 import { sendEmail } from "./email";
 
 const authLimiter = rateLimit({
@@ -323,6 +323,198 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) {
       console.error("AI approve error:", e);
       res.status(500).json({ error: "Failed to approve and send" });
+    }
+  });
+
+  app.get("/api/folders", requireAuth, async (req, res) => {
+    try {
+      const folders = await storage.getCustomFolders(req.user!.id);
+      res.json(folders);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch folders" });
+    }
+  });
+
+  const createFolderSchema = z.object({
+    name: z.string().min(1).max(50).trim(),
+    parentId: z.string().nullable().optional(),
+    icon: z.string().max(20).optional().default("folder"),
+    color: z.string().max(20).optional().default("blue"),
+  });
+
+  app.post("/api/folders", requireAuth, async (req, res) => {
+    try {
+      const parsed = createFolderSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+      const { name, parentId, icon, color } = parsed.data;
+
+      const existing = await storage.getCustomFolderByName(req.user!.id, name, parentId || null);
+      if (existing) {
+        return res.json(existing);
+      }
+
+      const folder = await storage.createCustomFolder({
+        userId: req.user!.id,
+        name,
+        parentId: parentId || null,
+        icon,
+        color,
+      });
+      res.status(201).json(folder);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to create folder" });
+    }
+  });
+
+  app.delete("/api/folders/:id", requireAuth, async (req, res) => {
+    try {
+      const deleted = await storage.deleteCustomFolder(req.params.id, req.user!.id);
+      if (!deleted) return res.status(404).json({ error: "Folder not found" });
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to delete folder" });
+    }
+  });
+
+  app.post("/api/ai/auto-organize", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+
+      const activityRecord = await storage.createAgentActivity({
+        userId,
+        agentName: "EOMail Assistant",
+        action: "Auto-organizing inbox into folders",
+        status: "pending",
+        emailId: null,
+        detail: null,
+      });
+
+      const inboxEmails = await storage.getEmails(userId, "inbox");
+      if (inboxEmails.length === 0) {
+        await storage.updateAgentActivity(activityRecord.id, userId, {
+          status: "complete",
+          detail: "No emails in inbox to organize",
+        });
+        return res.json({ success: true, organized: 0, folders: [] });
+      }
+
+      const categoryMap: Record<string, string> = {
+        finance: "Finance",
+        scheduling: "Scheduling",
+        newsletter: "Newsletters",
+        "action-required": "Action Required",
+        social: "Social",
+        notification: "Notifications",
+      };
+
+      const folderStats: Record<string, number> = {};
+      let organized = 0;
+
+      const allCustomEmails = await Promise.all(
+        Object.values(categoryMap).map((name) =>
+          storage.getEmails(userId, `custom:${name}`)
+        )
+      );
+      const existingCopies = new Set<string>();
+      for (const emailList of allCustomEmails) {
+        for (const e of emailList) {
+          existingCopies.add(`${e.subject}|${e.fromEmail}|${e.timestamp.toISOString()}`);
+        }
+      }
+
+      for (const email of inboxEmails) {
+        let category = email.aiCategory;
+
+        if (!category) {
+          try {
+            const classification = await classifyEmail(email.from, email.subject, email.body);
+            category = classification.category;
+            await storage.updateEmail(email.id, userId, {
+              aiCategory: category,
+              aiUrgency: classification.urgency,
+              aiSuggestedAction: classification.suggestedAction,
+              aiProcessed: true,
+            });
+          } catch {
+            category = "notification";
+          }
+        }
+
+        const folderName = categoryMap[category] || "Other";
+        const customFolderKey = `custom:${folderName}`;
+
+        const dedupKey = `${email.subject}|${email.fromEmail}|${email.timestamp.toISOString()}`;
+        if (existingCopies.has(dedupKey)) {
+          continue;
+        }
+
+        let existingFolder = await storage.getCustomFolderByName(userId, folderName, null);
+        if (!existingFolder) {
+          const colorMap: Record<string, string> = {
+            Finance: "emerald",
+            Scheduling: "blue",
+            Newsletters: "purple",
+            "Action Required": "rose",
+            Social: "amber",
+            Notifications: "slate",
+            Other: "gray",
+          };
+          existingFolder = await storage.createCustomFolder({
+            userId,
+            name: folderName,
+            parentId: null,
+            icon: "folder",
+            color: colorMap[folderName] || "blue",
+          });
+        }
+
+        await storage.createEmail({
+          userId,
+          from: email.from,
+          fromEmail: email.fromEmail,
+          to: email.to,
+          toEmail: email.toEmail,
+          cc: email.cc,
+          bcc: email.bcc,
+          subject: email.subject,
+          body: email.body,
+          preview: email.preview,
+          timestamp: email.timestamp,
+          read: email.read,
+          starred: email.starred,
+          folder: customFolderKey,
+          labels: email.labels,
+          attachments: email.attachments,
+          aiSummary: email.aiSummary,
+          aiCategory: email.aiCategory || category,
+          aiUrgency: email.aiUrgency,
+          aiSuggestedAction: email.aiSuggestedAction,
+          aiDraftReply: email.aiDraftReply,
+          aiSpamScore: email.aiSpamScore,
+          aiSpamReason: email.aiSpamReason,
+          aiProcessed: true,
+        } as InsertEmail);
+
+        existingCopies.add(dedupKey);
+        folderStats[folderName] = (folderStats[folderName] || 0) + 1;
+        organized++;
+      }
+
+      const folderSummary = Object.entries(folderStats)
+        .map(([name, count]) => `${name}: ${count}`)
+        .join(", ");
+
+      await storage.updateAgentActivity(activityRecord.id, userId, {
+        status: "complete",
+        detail: `Organized ${organized} emails into folders — ${folderSummary}`,
+      });
+
+      const createdFolders = await storage.getCustomFolders(userId);
+      res.json({ success: true, organized, folders: createdFolders, stats: folderStats });
+    } catch (e) {
+      console.error("Auto-organize error:", e);
+      res.status(500).json({ error: "Failed to auto-organize emails" });
     }
   });
 
