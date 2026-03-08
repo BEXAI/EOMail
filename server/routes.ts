@@ -63,6 +63,9 @@ const bulkActionSchema = z.object({
 });
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  // Health check for deployment monitoring
+  app.get("/api/health", (_req, res) => res.json({ status: "healthy", timestamp: new Date().toISOString() }));
+
   app.use("/api/", apiLimiter);
   app.use("/api/auth/login", authLimiter);
   app.use("/api/auth/register", authLimiter);

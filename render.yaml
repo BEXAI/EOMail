@@ -12,9 +12,12 @@ services:
     buildCommand: npm ci --include=dev && npm run build
     preDeployCommand: npm run db:push
     startCommand: npm run start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=450
       - key: PORT
         value: "10000"
       - key: DATABASE_URL
