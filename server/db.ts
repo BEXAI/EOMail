@@ -1,38 +1,17 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-// Safe path resolution for bundled environment
-let projectDir = process.cwd();
-try {
-  // Check if we are in an ESM environment with import.meta.url
-  if (typeof import.meta !== 'undefined' && import.meta && import.meta.url) {
-    const __filename = fileURLToPath(import.meta.url);
-    projectDir = path.dirname(path.dirname(__filename));
-  } else {
-    // Fallback for CJS/Bundled environments
-    projectDir = path.resolve(__dirname, "..");
-  }
-} catch (e) {
-  // Broad fallback for any resolution error
-  projectDir = path.resolve(__dirname, "..");
-}
 
 if (!process.env.DATABASE_URL) {
-  console.warn("WARNING: DATABASE_URL must be set. Ensure the database is provisioned.");
+  throw new Error("DATABASE_URL must be set. Ensure the database is provisioned.");
 }
 
 export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 20,
+  max: 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-  ssl: process.env.DATABASE_URL?.includes("render.com") || process.env.DATABASE_URL?.includes("oregon-postgres")
-    ? { rejectUnauthorized: false }
-    : (process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false),
+  connectionTimeoutMillis: 10000,
+  ...(process.env.NODE_ENV === "production" ? { ssl: { rejectUnauthorized: false } } : {}),
 });
 
 pool.on("error", (err) => {
@@ -41,34 +20,20 @@ pool.on("error", (err) => {
 
 export const db = drizzle(pool, { schema });
 
-export async function initSchema() {
-  if (process.env.DATABASE_URL) {
+export async function verifyDatabaseConnection(retries = 3): Promise<boolean> {
+  for (let i = 0; i < retries; i++) {
     try {
-      // Look for schema.sql in project root (common in Render/Replit) or local dir
-      const sqlPaths = [
-        path.resolve(projectDir, "schema.sql"),
-        path.resolve(process.cwd(), "schema.sql")
-      ];
-
-      let sqlFile = sqlPaths.find(p => fs.existsSync(p));
-
-      if (sqlFile) {
-        // Check if users table already exists to avoid redundant execution
-        const checkTable = await pool.query(`SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users')`);
-        if (checkTable.rows[0].exists) {
-          console.log("Database schema already exists. Skipping initialization.");
-          return;
-        }
-
-        const sqlContent = fs.readFileSync(sqlFile, "utf8");
-        await pool.query(sqlContent);
-        console.log("Database schema initialized successfully from one-shot SQL file.");
-      }
-      else {
-        console.warn("Schema initialization skipped: schema.sql not found.");
-      }
+      const client = await pool.connect();
+      await client.query("SELECT 1");
+      client.release();
+      console.log("Database connection verified successfully.");
+      return true;
     } catch (err) {
-      console.error("Failed to initialize database schema:", err);
+      const delay = Math.min(1000 * Math.pow(2, i), 8000);
+      console.warn(`Database connection attempt ${i + 1}/${retries} failed. Retrying in ${delay}ms...`, (err as Error).message);
+      if (i < retries - 1) await new Promise(r => setTimeout(r, delay));
     }
   }
+  console.error("Failed to connect to database after all retries.");
+  return false;
 }

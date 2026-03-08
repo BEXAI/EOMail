@@ -2,20 +2,11 @@ import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
-import { initSchema } from "./db";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
 const app = express();
 const httpServer = createServer(app);
-
-// Environment variable validation
-const REQUIRED_ENV = ["DATABASE_URL", "OPENAI_API_KEY", "RESEND_API_KEY"];
-REQUIRED_ENV.forEach((key) => {
-  if (!process.env[key]) {
-    console.warn(`[EOMail] CRITICAL WARNING: Environment variable ${key} is missing.`);
-  }
-});
 
 declare module "http" {
   interface IncomingMessage {
@@ -82,7 +73,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  await initSchema();
+  // Verify database connection before starting
+  const { verifyDatabaseConnection } = await import("./db");
+  const dbReady = await verifyDatabaseConnection(5);
+  if (!dbReady) {
+    console.error("WARNING: Database is unreachable. Server will start but DB queries will fail.");
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
