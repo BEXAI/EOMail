@@ -30,7 +30,9 @@ export const pool = new pg.Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-  ...(process.env.NODE_ENV === "production" ? { ssl: { rejectUnauthorized: false } } : {}),
+  ssl: process.env.DATABASE_URL?.includes("render.com") || process.env.DATABASE_URL?.includes("oregon-postgres")
+    ? { rejectUnauthorized: false }
+    : (process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false),
 });
 
 pool.on("error", (err) => {
