@@ -16,6 +16,7 @@ interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
+  isDemoMode: boolean;
   loginMutation: any;
   registerMutation: any;
   logoutMutation: any;
@@ -88,8 +89,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  const isDemoMode = !user && !isLoading;
+
   return (
-    <AuthContext.Provider value={{ user: user ?? null, isLoading, loginMutation, registerMutation, logoutMutation }}>
+    <AuthContext.Provider value={{ user: user ?? null, isLoading, isDemoMode, loginMutation, registerMutation, logoutMutation }}>
       {children}
     </AuthContext.Provider>
   );

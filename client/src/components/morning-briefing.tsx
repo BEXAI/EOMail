@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type Email } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { DEMO_BRIEFING } from "@/lib/demo-data";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +24,7 @@ interface MorningBriefingProps {
   userName?: string;
   emails: Email[];
   onSelectEmail: (email: Email) => void;
+  isDemo?: boolean;
 }
 
 interface BriefingData {
@@ -37,13 +39,17 @@ const agentIcons: Record<string, { icon: typeof DollarSign; color: string; bgCol
   "EOMail Assistant": { icon: Sparkles, color: "text-purple-600 dark:text-purple-400", bgColor: "bg-purple-100 dark:bg-purple-900" },
 };
 
-export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBriefingProps) {
+export function MorningBriefing({ userName, emails, onSelectEmail, isDemo }: MorningBriefingProps) {
   const queryClient = useQueryClient();
   const firstName = userName?.split(" ")[0] || "there";
 
-  const { data: briefingData, isLoading: briefingLoading } = useQuery<BriefingData>({
+  const { data: liveBriefingData, isLoading: liveBriefingLoading } = useQuery<BriefingData>({
     queryKey: ["/api/ai/briefing"],
+    enabled: !isDemo,
   });
+
+  const briefingData = isDemo ? DEMO_BRIEFING : liveBriefingData;
+  const briefingLoading = isDemo ? false : liveBriefingLoading;
 
   const processAllMutation = useMutation({
     mutationFn: async () => {
@@ -81,70 +87,66 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
   return (
     <div className="flex flex-col h-full overflow-y-auto scrollbar-thin" data-testid="morning-briefing">
       <div className="max-w-2xl mx-auto w-full px-6 py-8 space-y-6">
-        <div className="text-center mb-10">
-          <div className="relative group mx-auto w-24 h-24 mb-6">
-            <div className="absolute -inset-2 bg-gradient-to-tr from-primary to-indigo-600 rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-500"></div>
-            <div className="relative w-full h-full rounded-3xl bg-[#0a0a0f] border border-white/10 flex items-center justify-center shadow-2xl">
-              <Sparkles className="w-10 h-10 text-primary animate-pulse" />
-            </div>
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mx-auto mb-4 border border-primary/10">
+            <Sparkles className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-4xl font-black text-white tracking-tight uppercase italic" data-testid="briefing-greeting">
+          <h1 className="text-2xl font-bold text-foreground" data-testid="briefing-greeting">
             {greeting}, {firstName}
           </h1>
-          <div className="flex items-center justify-center gap-2 mt-2">
-            <span className="h-px w-6 bg-white/10" />
-            <p className="text-[10px] font-black text-primary tracking-[0.3em] uppercase">
-              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-            </p>
-            <span className="h-px w-6 bg-white/10" />
-          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </p>
+          <p className="text-xs text-muted-foreground/60 mt-0.5 italic">
+            From Inbox Zero → Zero Time Spent
+          </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: "Inbox Queue", value: unreadCount, icon: Mail, color: "text-blue-400", glow: "shadow-blue-500/10" },
-            { label: "AI Synthesized", value: aiProcessedCount, icon: Brain, color: "text-violet-400", glow: "shadow-violet-500/10" },
-            { label: "Action Pending", value: pendingCount, icon: ClipboardCheck, color: "text-emerald-400", glow: "shadow-emerald-500/10" }
-          ].map((stat) => (
-            <Card key={stat.label} className={cn("eomail-glass border-white/5 bg-white/[0.02] shadow-xl", stat.glow)}>
-              <CardContent className="p-5 text-center flex flex-col items-center">
-                <div className="w-10 h-10 rounded-xl bg-white/[0.03] flex items-center justify-center mb-3 border border-white/5">
-                  <stat.icon className={cn("w-5 h-5", stat.color)} />
-                </div>
-                <div className="text-3xl font-black text-white mb-1" data-testid={`stat-${stat.label.toLowerCase().split(' ')[0]}`}>{stat.value}</div>
-                <div className="text-[9px] font-black text-white/30 uppercase tracking-widest">{stat.label}</div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="grid grid-cols-3 gap-3">
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <Mail className="w-5 h-5 text-blue-500 mx-auto mb-2" />
+              <div className="text-2xl font-bold text-foreground" data-testid="stat-unread">{unreadCount}</div>
+              <div className="text-xs text-muted-foreground">Unread emails</div>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <Brain className="w-5 h-5 text-purple-500 mx-auto mb-2" />
+              <div className="text-2xl font-bold text-foreground" data-testid="stat-processed">{aiProcessedCount}</div>
+              <div className="text-xs text-muted-foreground">AI processed</div>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <ClipboardCheck className="w-5 h-5 text-green-500 mx-auto mb-2" />
+              <div className="text-2xl font-bold text-foreground" data-testid="stat-pending">{pendingCount}</div>
+              <div className="text-xs text-muted-foreground">Pending approval</div>
+            </CardContent>
+          </Card>
         </div>
 
-        <Card className="eomail-card p-0.5 mt-8 border-primary/20 shadow-2xl shadow-primary/5">
-          <CardContent className="p-8 bg-gradient-to-br from-primary/[0.08] to-transparent rounded-[1.75rem]">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center shadow-[0_0_15px_rgba(var(--primary),0.3)] border border-primary/30">
-                <Sparkles className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <span className="text-xs font-black tracking-[0.2em] text-primary uppercase">Gemini 3 Intelligent Assistant</span>
-                <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest mt-0.5 self-start">Optimized Intelligence // System v3.0</p>
-              </div>
-              <Badge variant="outline" className="ml-auto text-[9px] font-black border-emerald-500/30 text-emerald-400 bg-emerald-500/5 px-2 py-0.5 rounded-md uppercase tracking-tighter">
-                Live Analysis
-              </Badge>
+        <Card className="border-border bg-gradient-to-br from-primary/5 to-transparent">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="text-sm font-semibold text-foreground">Chief of Staff Briefing</span>
             </div>
             {briefingLoading ? (
-              <div className="space-y-4">
-                <Skeleton className="h-4 w-full bg-white/5 rounded-full" />
-                <Skeleton className="h-4 w-5/6 bg-white/5 rounded-full" />
-                <Skeleton className="h-4 w-3/4 bg-white/5 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-4/6" />
               </div>
             ) : (
-              <div className="relative">
-                <p className="text-lg text-white/90 leading-relaxed font-semibold pr-4" data-testid="briefing-text">
-                  {briefingData?.briefing || "Enable AI tools to analyze your inbox and generate smart briefings."}
-                </p>
-                <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-[#0a0a0f] to-transparent pointer-events-none" />
-              </div>
+              <p className="text-sm text-foreground/80 leading-relaxed" data-testid="briefing-text">
+                {briefingData?.briefing || "Process your emails with AI to get your morning briefing."}
+              </p>
             )}
           </CardContent>
         </Card>
@@ -179,7 +181,7 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
           </div>
         )}
 
-        {unprocessedCount > 0 && (
+        {unprocessedCount > 0 && !isDemo && (
           <Button
             onClick={() => processAllMutation.mutate()}
             disabled={processAllMutation.isPending}

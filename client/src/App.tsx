@@ -1,11 +1,11 @@
-import { lazy, Suspense, Component, type ReactNode } from "react";
+import { lazy, Suspense } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Redirect } from "wouter";
 
 const MailPage = lazy(() => import("@/pages/mail"));
@@ -38,48 +38,6 @@ function ProtectedRoute({ component: Component }: { component: () => JSX.Element
   return <Component />;
 }
 
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error) {
-    console.error("App error boundary caught:", error);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="flex items-center justify-center h-screen bg-background">
-          <div className="flex flex-col items-center gap-4 max-w-md text-center px-4">
-            <AlertTriangle className="w-10 h-10 text-destructive" />
-            <h2 className="text-lg font-semibold text-foreground">Something went wrong</h2>
-            <p className="text-sm text-muted-foreground">
-              The app encountered an error. This may be a temporary issue.
-            </p>
-            <button
-              onClick={() => {
-                this.setState({ hasError: false });
-                queryClient.clear();
-                window.location.href = "/auth";
-              }}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90"
-            >
-              Return to Login
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
 function LazyFallback() {
   return (
     <div className="flex items-center justify-center h-screen bg-background">
@@ -97,7 +55,7 @@ function Router() {
         <Route path="/reset-password" component={ResetPasswordPage} />
         <Route path="/verify-email" component={VerifyEmailPage} />
         <Route path="/">
-          {() => <ProtectedRoute component={MailPage} />}
+          {() => <MailPage />}
         </Route>
         <Route component={NotFound} />
       </Switch>
@@ -111,9 +69,7 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <Toaster />
-          <ErrorBoundary>
-            <Router />
-          </ErrorBoundary>
+          <Router />
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { type Email } from "@shared/schema";
 import { AppSidebar } from "@/components/app-sidebar";
 import { EmailList } from "@/components/email-list";
@@ -24,6 +25,8 @@ import {
   SlidersHorizontal,
   Keyboard,
   Bot,
+  LogIn,
+  UserPlus,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -34,6 +37,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useEmailActions } from "@/hooks/use-email-actions";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { getDemoEmails, DEMO_COUNTS, DEMO_USER } from "@/lib/demo-data";
 
 const FOLDER_LABELS: Record<string, string> = {
   inbox: "Inbox",
@@ -60,28 +66,35 @@ export default function MailPage() {
   const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
-  const [chatPanelExpanded, setChatPanelExpanded] = useState(true);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { user, logoutMutation } = useAuth();
+  const { user, isDemoMode, logoutMutation } = useAuth();
+  const [, setLocation] = useLocation();
   const searchRef = useRef<HTMLInputElement>(null);
 
   const queryParams = new URLSearchParams({ folder });
   if (search) queryParams.append("search", search);
   if (labelFilter) queryParams.append("label", labelFilter);
 
-  const { data: emails = [], isLoading: emailsLoading } = useQuery<Email[]>({
+  const { data: liveEmails = [], isLoading: liveEmailsLoading } = useQuery<Email[]> ({
     queryKey: ["/api/emails", folder, search, labelFilter],
     queryFn: async () => {
       const res = await fetch(`/api/emails?${queryParams}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch emails");
       return res.json();
     },
+    enabled: !!user,
   });
 
-  const { data: counts = {} } = useQuery<Record<string, number>>({
+  const { data: liveCounts = {} } = useQuery<Record<string, number>>({
     queryKey: ["/api/emails/counts"],
+    enabled: !!user,
   });
+
+  const demoEmails = useMemo(() => getDemoEmails(folder), [folder]);
+  const emails = isDemoMode ? demoEmails : liveEmails;
+  const emailsLoading = isDemoMode ? false : liveEmailsLoading;
+  const counts = isDemoMode ? DEMO_COUNTS : liveCounts;
 
   const invalidateAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
@@ -102,72 +115,13 @@ export default function MailPage() {
     setSearchInput("");
   }, []);
 
-  const markReadMutation = useMutation({
-    mutationFn: async ({ id, read }: { id: string; read: boolean }) => {
-      await apiRequest("PATCH", `/api/emails/${id}`, { read });
-    },
-    onSuccess: (_, { id, read }) => {
-      invalidateAll();
-      if (selectedEmail?.id === id) {
-        setSelectedEmail((prev) => prev ? { ...prev, read } : null);
-      }
-    },
-    onError: () => { toast({ title: "Failed to update", variant: "destructive" }); },
-  });
-
-  const starMutation = useMutation({
-    mutationFn: async ({ id, starred }: { id: string; starred: boolean }) => {
-      await apiRequest("PATCH", `/api/emails/${id}`, { starred });
-    },
-    onSuccess: (_, { id, starred }) => {
-      invalidateAll();
-      if (selectedEmail?.id === id) {
-        setSelectedEmail((prev) => prev ? { ...prev, starred } : null);
-      }
-    },
-    onError: () => { toast({ title: "Failed to star email", variant: "destructive" }); },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      if (folder === "trash") {
-        await apiRequest("DELETE", `/api/emails/${id}`);
-      } else {
-        await apiRequest("PATCH", `/api/emails/${id}`, { folder: "trash" });
-      }
-    },
-    onSuccess: (_, id) => {
-      invalidateAll();
-      if (selectedEmail?.id === id) setSelectedEmail(null);
-      toast({ title: folder === "trash" ? "Email deleted permanently" : "Moved to trash" });
-    },
-    onError: () => { toast({ title: "Failed to delete", variant: "destructive" }); },
-  });
-
-  const moveMutation = useMutation({
-    mutationFn: async ({ id, targetFolder }: { id: string; targetFolder: string }) => {
-      await apiRequest("PATCH", `/api/emails/${id}`, { folder: targetFolder });
-    },
-    onSuccess: (_, { id, targetFolder }) => {
-      invalidateAll();
-      if (selectedEmail?.id === id) setSelectedEmail(null);
-      const folderLabel = targetFolder.startsWith("custom:") ? targetFolder.replace("custom:", "") : (FOLDER_LABELS[targetFolder] || targetFolder);
-      toast({ title: `Moved to ${folderLabel}` });
-    },
-    onError: () => { toast({ title: "Failed to move email", variant: "destructive" }); },
-  });
-
-  const archiveMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("PATCH", `/api/emails/${id}`, { folder: "archive" });
-    },
-    onSuccess: (_, id) => {
-      invalidateAll();
-      if (selectedEmail?.id === id) setSelectedEmail(null);
-      toast({ title: "Archived" });
-    },
-    onError: () => { toast({ title: "Failed to archive", variant: "destructive" }); },
-  });
+  const {
+    markReadMutation,
+    starMutation,
+    deleteMutation,
+    moveMutation,
+    archiveMutation,
+  } = useEmailActions(selectedEmail, setSelectedEmail, folder);
 
   const sendMutation = useMutation({
     mutationFn: async (data: ComposeData & { draftId?: string }) => {
@@ -276,8 +230,8 @@ export default function MailPage() {
     onError: () => { toast({ title: "Bulk action failed", variant: "destructive" }); },
   });
 
-  const handleSelectEmail = useCallback((email: Email) => {
-    if (folder === "drafts") {
+  const handleSelectEmail = useCallback((email: Email | null) => {
+    if (folder === "drafts" && email) {
       setEditingDraft(email);
       setReplyTo(null);
       setComposePrefill(null);
@@ -285,8 +239,8 @@ export default function MailPage() {
       return;
     }
     setSelectedEmail(email);
-    if (!email.read) markReadMutation.mutate({ id: email.id, read: true });
-  }, [markReadMutation, folder]);
+    if (email && !email.read && !isDemoMode) markReadMutation.mutate({ id: email.id, read: true });
+  }, [markReadMutation, folder, isDemoMode]);
 
   const handleFolderChange = useCallback((newFolder: string) => {
     setFolder(newFolder);
@@ -339,6 +293,16 @@ export default function MailPage() {
   }, [discardDraftMutation]);
 
   const handleSend = (data: ComposeData) => {
+    if (isDemoMode) {
+      setComposing(false);
+      toast({
+        title: "Sign in to send emails",
+        description: "Create an account or log in to send messages from your EOMail inbox.",
+      });
+      setTimeout(() => setLocation("/auth"), 1500);
+      return;
+    }
+
     const currentDraftId = editingDraft?.id;
     setComposing(false);
 
@@ -386,93 +350,20 @@ export default function MailPage() {
     setComposing(true);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (undoTimer) clearTimeout(undoTimer);
-    };
-  }, [undoTimer]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setCommandBarOpen(true);
-        return;
-      }
-
-      const target = e.target as HTMLElement;
-      const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
-      if (isInput) return;
-
-      switch (e.key) {
-        case "c":
-          e.preventDefault();
-          handleCompose();
-          break;
-        case "r":
-          if (selectedEmail) {
-            e.preventDefault();
-            handleReply(selectedEmail);
-          }
-          break;
-        case "s":
-          if (selectedEmail) {
-            e.preventDefault();
-            starMutation.mutate({ id: selectedEmail.id, starred: !selectedEmail.starred });
-          }
-          break;
-        case "e":
-          if (selectedEmail) {
-            e.preventDefault();
-            archiveMutation.mutate(selectedEmail.id);
-          }
-          break;
-        case "#":
-          if (selectedEmail) {
-            e.preventDefault();
-            deleteMutation.mutate(selectedEmail.id);
-          }
-          break;
-        case "/":
-          e.preventDefault();
-          searchRef.current?.focus();
-          break;
-        case "Escape":
-          if (composing) {
-            closeCompose();
-          } else if (selectedEmail) {
-            setSelectedEmail(null);
-          }
-          break;
-        case "j": {
-          e.preventDefault();
-          const currentIndex = emails.findIndex((em) => em.id === selectedEmail?.id);
-          if (currentIndex < emails.length - 1) {
-            handleSelectEmail(emails[currentIndex + 1]);
-          } else if (currentIndex === -1 && emails.length > 0) {
-            handleSelectEmail(emails[0]);
-          }
-          break;
-        }
-        case "k": {
-          e.preventDefault();
-          const currentIdx = emails.findIndex((em) => em.id === selectedEmail?.id);
-          if (currentIdx > 0) {
-            handleSelectEmail(emails[currentIdx - 1]);
-          }
-          break;
-        }
-        case "Enter":
-          if (!selectedEmail && emails.length > 0) {
-            handleSelectEmail(emails[0]);
-          }
-          break;
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedEmail, composing, emails, handleCompose, handleReply, handleSelectEmail, closeCompose]);
+  useKeyboardShortcuts({
+    composing,
+    selectedEmail,
+    emails,
+    handleCompose,
+    handleReply,
+    handleSelectEmail,
+    closeCompose,
+    starMutation,
+    archiveMutation,
+    deleteMutation,
+    searchRef,
+    setCommandBarOpen,
+  });
 
   const sidebarStyle = {
     "--sidebar-width": "15rem",
@@ -485,12 +376,20 @@ export default function MailPage() {
       ? folder.replace("custom:", "")
       : FOLDER_LABELS[folder] || folder;
 
+  const demoGuard = () => {
+    if (isDemoMode) {
+      toast({ title: "Sign in to manage emails", description: "Create an account to use all features." });
+      return true;
+    }
+    return false;
+  };
+
   const emailActions = {
-    onStar: (id: string, starred: boolean) => starMutation.mutate({ id, starred }),
-    onDelete: (id: string) => deleteMutation.mutate(id),
-    onMarkRead: (id: string, read: boolean) => markReadMutation.mutate({ id, read }),
-    onMove: (id: string, targetFolder: string) => moveMutation.mutate({ id, targetFolder }),
-    onArchive: (id: string) => archiveMutation.mutate(id),
+    onStar: (id: string, starred: boolean) => { if (!demoGuard()) starMutation.mutate({ id, starred }); },
+    onDelete: (id: string) => { if (!demoGuard()) deleteMutation.mutate(id); },
+    onMarkRead: (id: string, read: boolean) => { if (!demoGuard()) markReadMutation.mutate({ id, read }); },
+    onMove: (id: string, targetFolder: string) => { if (!demoGuard()) moveMutation.mutate({ id, targetFolder }); },
+    onArchive: (id: string) => { if (!demoGuard()) archiveMutation.mutate(id); },
   };
 
   return (
@@ -503,10 +402,11 @@ export default function MailPage() {
           onFolderChange={handleFolderChange}
           activeLabel={labelFilter}
           onLabelFilter={handleLabelFilter}
-          userName={user?.displayName}
-          userEmail={user?.email}
-          userInitials={user?.avatarInitials}
-          mailboxAddress={user?.mailboxAddress}
+          userName={user?.displayName || (isDemoMode ? DEMO_USER.displayName : undefined)}
+          userEmail={user?.email || (isDemoMode ? DEMO_USER.email : undefined)}
+          userInitials={user?.avatarInitials || (isDemoMode ? DEMO_USER.avatarInitials : undefined)}
+          mailboxAddress={user?.mailboxAddress || (isDemoMode ? DEMO_USER.mailboxAddress : undefined)}
+          isDemo={isDemoMode}
         />
 
         <SidebarInset className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -585,14 +485,27 @@ export default function MailPage() {
                 <TooltipContent>AI Assistant</TooltipContent>
               </Tooltip>
               <ThemeToggle />
-              <div
-                className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold cursor-pointer ml-1"
-                data-testid="avatar-user"
-                onClick={() => logoutMutation.mutate(undefined)}
-                title={`${user?.displayName} — Click to sign out`}
-              >
-                {user?.avatarInitials || "ME"}
-              </div>
+              {isDemoMode ? (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="ml-1 gap-1.5 rounded-full text-xs font-semibold"
+                  onClick={() => setLocation("/auth")}
+                  data-testid="button-header-signin"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  Sign In
+                </Button>
+              ) : (
+                <div
+                  className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold cursor-pointer ml-1"
+                  data-testid="avatar-user"
+                  onClick={() => logoutMutation.mutate(undefined)}
+                  title={`${user?.displayName} — Click to sign out`}
+                >
+                  {user?.avatarInitials || "ME"}
+                </div>
+              )}
             </div>
           </header>
 
@@ -653,9 +566,10 @@ export default function MailPage() {
             {!selectedEmail && (
               <div className="hidden md:flex flex-1 overflow-hidden">
                 <MorningBriefing
-                  userName={user?.displayName}
+                  userName={user?.displayName || (isDemoMode ? DEMO_USER.displayName : undefined)}
                   emails={emails}
                   onSelectEmail={handleSelectEmail}
+                  isDemo={isDemoMode}
                 />
               </div>
             )}
@@ -676,7 +590,39 @@ export default function MailPage() {
       />
 
       <AiCommandBar open={commandBarOpen} onOpenChange={setCommandBarOpen} />
-      <AiChatPanel isOpen={chatPanelOpen} onToggle={() => setChatPanelOpen(!chatPanelOpen)} onExpandChange={setChatPanelExpanded} emailId={selectedEmail?.id} />
+      <AiChatPanel isOpen={chatPanelOpen} onToggle={() => setChatPanelOpen(!chatPanelOpen)} />
+
+      {isDemoMode && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-center pb-4 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-3 px-5 py-2.5 rounded-full bg-background/90 backdrop-blur-md border border-border shadow-lg">
+            <span className="text-xs text-muted-foreground font-medium">
+              Viewing EOMail in demo mode
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="default"
+                className="h-7 rounded-full text-xs gap-1 px-3"
+                onClick={() => setLocation("/auth")}
+                data-testid="button-demo-signin"
+              >
+                <LogIn className="w-3 h-3" />
+                Sign In
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 rounded-full text-xs gap-1 px-3"
+                onClick={() => setLocation("/auth")}
+                data-testid="button-demo-signup"
+              >
+                <UserPlus className="w-3 h-3" />
+                Create Account
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </SidebarProvider>
   );
 }

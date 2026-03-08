@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type AgentActivity, type CustomFolder } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { DEMO_AGENT_ACTIVITY, DEMO_CUSTOM_FOLDERS } from "@/lib/demo-data";
 import logoPath from "@assets/912AF931-1EA4-4CC4-8976-8C6D0557A5A5_1_105_c_1772859976130.jpeg";
 import {
   Sidebar,
@@ -15,7 +16,6 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
   CollapsibleContent,
@@ -67,6 +67,7 @@ interface SidebarProps {
   userEmail?: string;
   userInitials?: string;
   mailboxAddress?: string;
+  isDemo?: boolean;
 }
 
 const systemFolders = [
@@ -114,9 +115,10 @@ const folderColorMap: Record<string, string> = {
   gray: "text-gray-400",
 };
 
-function ActiveAgentsSection() {
-  const { data: activities = [] } = useQuery<AgentActivity[]>({
+function ActiveAgentsSection({ isDemo }: { isDemo?: boolean }) {
+  const { data: liveActivities = [] } = useQuery<AgentActivity[]>({
     queryKey: ["/api/ai/activity"],
+    enabled: !isDemo,
     refetchInterval: (query) => {
       const data = query.state.data as AgentActivity[] | undefined;
       if (data?.some((a) => a.status === "pending")) return 5000;
@@ -124,6 +126,7 @@ function ActiveAgentsSection() {
     },
   });
 
+  const activities = isDemo ? DEMO_AGENT_ACTIVITY : liveActivities;
   const recent = activities.slice(0, 8);
   const pendingCount = activities.filter((a) => a.status === "pending").length;
 
@@ -153,12 +156,10 @@ function ActiveAgentsSection() {
                 return (
                   <div
                     key={activity.id}
-                    className="flex items-start gap-2 px-2 py-1.5 rounded-md text-xs hover:bg-sidebar-accent/50 transition-colors"
+                    className="flex items-start gap-2 px-2 py-1.5 rounded-md text-xs"
+                    data-testid={`agent-activity-${activity.id}`}
                   >
-                    <div className={cn("w-4 h-4 rounded flex items-center justify-center shrink-0 mt-0.5 relative", agent.bgColor)}>
-                      {activity.status === "pending" && (
-                        <div className="absolute -inset-0.5 bg-primary/20 rounded-full animate-ping opacity-50" />
-                      )}
+                    <div className={cn("w-4 h-4 rounded flex items-center justify-center shrink-0 mt-0.5", agent.bgColor)}>
                       {activity.status === "pending" ? (
                         <Loader2 className={cn("w-2.5 h-2.5 animate-spin", agent.color)} />
                       ) : (
@@ -197,19 +198,24 @@ function CustomFoldersSection({
   onFolderChange,
   onLabelFilter,
   counts,
+  isDemo,
 }: {
   activeFolder: string;
   onFolderChange: (folder: string) => void;
   onLabelFilter: (label: string | null) => void;
   counts: Record<string, number>;
+  isDemo?: boolean;
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const { data: customFoldersList = [] } = useQuery<CustomFolder[]>({
+  const { data: liveFolders = [] } = useQuery<CustomFolder[]>({
     queryKey: ["/api/folders"],
+    enabled: !isDemo,
   });
+
+  const customFoldersList = isDemo ? DEMO_CUSTOM_FOLDERS : liveFolders;
 
   const autoOrganizeMutation = useMutation({
     mutationFn: async () => {
@@ -242,6 +248,36 @@ function CustomFoldersSection({
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  if (rootFolders.length === 0 && !autoOrganizeMutation.isPending) {
+    return (
+      <SidebarGroup className="mt-2">
+        <div className="flex items-center gap-1 px-3 mb-1">
+          <FolderPlus className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Smart Folders</span>
+        </div>
+        <SidebarGroupContent>
+          <div className="px-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-start gap-2 text-xs rounded-lg border-dashed"
+              onClick={() => autoOrganizeMutation.mutate()}
+              disabled={autoOrganizeMutation.isPending}
+              data-testid="button-auto-organize"
+            >
+              {autoOrganizeMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Wand2 className="w-3.5 h-3.5" />
+              )}
+              Automate Emails Into Folders
+            </Button>
+          </div>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    );
+  }
+
   return (
     <SidebarGroup className="mt-2">
       <Collapsible defaultOpen>
@@ -258,27 +294,29 @@ function CustomFoldersSection({
               {rootFolders.map((folder) => {
                 const children = getChildren(folder.id);
                 const folderKey = `custom:${folder.name}`;
-                const isActive = activeFolder === folderKey;
+                const isActive = activeFolder === folderKey && true;
                 const FolderIcon = folderIconMap[folder.name] || Folder;
                 const colorClass = folderColorMap[folder.color || "blue"] || "text-blue-500";
                 const count = counts[folderKey] || 0;
                 const isExpanded = expanded[folder.id] ?? false;
 
-                return (
-                  <SidebarMenuItem key={folder.id}>
-                    <div className="flex flex-col w-full">
-                      <SidebarMenuButton
-                        onClick={() => { onLabelFilter(null); onFolderChange(folderKey); }}
-                        isActive={isActive}
-                        className={cn(
-                          "rounded-full px-3 py-1.5 cursor-pointer transition-colors relative group/item",
-                          isActive && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
-                        )}
-                      >
-                        {children.length > 0 && (
+                if (children.length > 0) {
+                  return (
+                    <SidebarMenuItem key={folder.id}>
+                      <div>
+                        <SidebarMenuButton
+                          onClick={() => { onLabelFilter(null); onFolderChange(folderKey); }}
+                          isActive={isActive}
+                          className={cn(
+                            "rounded-full px-3 py-1.5 cursor-pointer transition-colors",
+                            isActive && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+                          )}
+                          data-testid={`nav-custom-folder-${folder.name.toLowerCase().replace(/\s+/g, "-")}`}
+                        >
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleExpanded(folder.id); }}
-                            className="p-0.5 -ml-1 mr-1"
+                            className="p-0.5 -ml-1"
+                            data-testid={`toggle-folder-${folder.name.toLowerCase().replace(/\s+/g, "-")}`}
                           >
                             {isExpanded ? (
                               <ChevronDown className="w-3 h-3 text-muted-foreground" />
@@ -286,64 +324,86 @@ function CustomFoldersSection({
                               <ChevronRight className="w-3 h-3 text-muted-foreground" />
                             )}
                           </button>
+                          <FolderIcon className={cn("w-4 h-4 shrink-0", colorClass)} />
+                          <span className="flex-1 text-sm">{folder.name}</span>
+                          {count > 0 && (
+                            <span className="text-xs font-semibold ml-auto text-muted-foreground">{count}</span>
+                          )}
+                        </SidebarMenuButton>
+                        {isExpanded && (
+                          <div className="ml-4 border-l border-sidebar-border pl-1">
+                            {children.map((child) => {
+                              const childKey = `custom:${child.name}`;
+                              const childActive = activeFolder === childKey;
+                              const childCount = counts[childKey] || 0;
+                              const ChildIcon = folderIconMap[child.name] || Folder;
+                              const childColor = folderColorMap[child.color || "blue"] || "text-blue-500";
+                              return (
+                                <SidebarMenuButton
+                                  key={child.id}
+                                  onClick={() => { onLabelFilter(null); onFolderChange(childKey); }}
+                                  isActive={childActive}
+                                  className={cn(
+                                    "rounded-full px-3 py-1 cursor-pointer text-sm",
+                                    childActive && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+                                  )}
+                                  data-testid={`nav-custom-folder-${child.name.toLowerCase().replace(/\s+/g, "-")}`}
+                                >
+                                  <ChildIcon className={cn("w-3.5 h-3.5 shrink-0", childColor)} />
+                                  <span className="flex-1">{child.name}</span>
+                                  {childCount > 0 && (
+                                    <span className="text-xs font-semibold ml-auto text-muted-foreground">{childCount}</span>
+                                  )}
+                                </SidebarMenuButton>
+                              );
+                            })}
+                          </div>
                         )}
-                        <FolderIcon className={cn("w-4 h-4 shrink-0 mr-2", colorClass)} />
-                        <span className="flex-1 text-sm">{folder.name}</span>
-                        {count > 0 && (
-                          <span className="text-xs font-semibold ml-auto text-muted-foreground">{count}</span>
-                        )}
-                        <Badge variant="outline" className="opacity-0 group-hover/item:opacity-100 transition-opacity text-[8px] h-3.5 px-1 border-primary/20 text-primary uppercase ml-1">PRO</Badge>
-                      </SidebarMenuButton>
+                      </div>
+                    </SidebarMenuItem>
+                  );
+                }
 
-                      {isExpanded && children.length > 0 && (
-                        <div className="ml-6 border-l border-sidebar-border/50 pl-2 mt-0.5 space-y-0.5">
-                          {children.map((child) => {
-                            const childKey = `custom:${child.name}`;
-                            const childActive = activeFolder === childKey;
-                            const childCount = counts[childKey] || 0;
-                            const ChildIcon = folderIconMap[child.name] || Folder;
-                            const childColor = folderColorMap[child.color || "blue"] || "text-blue-500";
-                            return (
-                              <SidebarMenuButton
-                                key={child.id}
-                                onClick={() => { onLabelFilter(null); onFolderChange(childKey); }}
-                                isActive={childActive}
-                                className={cn(
-                                  "rounded-full px-3 py-1 cursor-pointer text-sm h-8",
-                                  childActive && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
-                                )}
-                              >
-                                <ChildIcon className={cn("w-3.5 h-3.5 shrink-0 mr-2", childColor)} />
-                                <span className="flex-1 text-xs">{child.name}</span>
-                                {childCount > 0 && (
-                                  <span className="text-[10px] font-semibold ml-auto text-muted-foreground">{childCount}</span>
-                                )}
-                              </SidebarMenuButton>
-                            );
-                          })}
-                        </div>
+                return (
+                  <SidebarMenuItem key={folder.id}>
+                    <SidebarMenuButton
+                      onClick={() => { onLabelFilter(null); onFolderChange(folderKey); }}
+                      isActive={isActive}
+                      className={cn(
+                        "rounded-full px-3 py-1.5 cursor-pointer transition-colors",
+                        isActive && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
                       )}
-                    </div>
+                      data-testid={`nav-custom-folder-${folder.name.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      <FolderIcon className={cn("w-4 h-4 shrink-0", colorClass)} />
+                      <span className="flex-1 text-sm">{folder.name}</span>
+                      {count > 0 && (
+                        <span className="text-xs font-semibold ml-auto text-muted-foreground">{count}</span>
+                      )}
+                    </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
               })}
             </SidebarMenu>
-            <div className="px-2 mt-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2 text-[10px] text-primary/60 hover:text-primary hover:bg-primary/5 font-bold uppercase tracking-wider"
-                onClick={() => autoOrganizeMutation.mutate()}
-                disabled={autoOrganizeMutation.isPending}
-              >
-                {autoOrganizeMutation.isPending ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Wand2 className="w-3 h-3" />
-                )}
-                {autoOrganizeMutation.isPending ? "Organizing..." : "Automate Folders"}
-              </Button>
-            </div>
+            {!isDemo && (
+              <div className="px-2 mt-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => autoOrganizeMutation.mutate()}
+                  disabled={autoOrganizeMutation.isPending}
+                  data-testid="button-auto-organize"
+                >
+                  {autoOrganizeMutation.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="w-3.5 h-3.5" />
+                  )}
+                  {autoOrganizeMutation.isPending ? "Organizing..." : "Automate Emails Into Folders"}
+                </Button>
+              </div>
+            )}
           </SidebarGroupContent>
         </CollapsibleContent>
       </Collapsible>
@@ -351,37 +411,29 @@ function CustomFoldersSection({
   );
 }
 
-export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, activeLabel, onLabelFilter, userName, userEmail, userInitials, mailboxAddress }: SidebarProps) {
+export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, activeLabel, onLabelFilter, userName, userEmail, userInitials, mailboxAddress, isDemo }: SidebarProps) {
   return (
-    <Sidebar className="border-r border-sidebar-border/50">
-      <SidebarHeader className="px-3 pt-6 pb-4">
-        <div className="flex items-center gap-3 px-2 mb-6 group cursor-default">
-          <div className="relative">
-            <div className="absolute -inset-1.5 bg-gradient-to-tr from-primary to-indigo-600 rounded-lg blur opacity-25 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-            <img src={logoPath} alt="EOMail logo" className="relative w-9 h-9 rounded-lg object-cover shadow-2xl border border-white/10" />
-          </div>
+    <Sidebar>
+      <SidebarHeader className="px-3 pt-4 pb-2">
+        <div className="flex items-center gap-2 px-1 mb-3">
+          <img src={logoPath} alt="EOMail logo" className="w-8 h-8 rounded-md object-cover" />
           <div className="flex flex-col">
-            <span className="font-black text-lg text-sidebar-foreground leading-none tracking-tighter uppercase italic">EOMail</span>
-            <div className="flex items-center gap-1 mt-0.5">
-              <span className="text-[10px] font-bold text-primary tracking-widest uppercase opacity-70">AI Optimized</span>
-              <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]"></span>
-            </div>
+            <span className="font-bold text-base text-sidebar-foreground leading-tight tracking-tight">EOMail</span>
+            <span className="text-[10px] text-muted-foreground leading-tight">Inbox Zero → Zero Time Spent</span>
           </div>
         </div>
         <Button
           onClick={onCompose}
-          className="w-full justify-start gap-2.5 rounded-xl px-4 py-6 shadow-xl shadow-primary/20 hover:shadow-primary/30 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-primary to-indigo-600 border-0"
+          className="w-full justify-start gap-2 rounded-2xl px-4 shadow-md"
           size="default"
           data-testid="button-compose"
         >
-          <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center">
-            <Plus className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-bold tracking-tight">Compose Message</span>
+          <Plus className="w-4 h-4" />
+          Compose
         </Button>
       </SidebarHeader>
 
-      <SidebarContent className="px-2 scrollbar-none">
+      <SidebarContent className="px-2">
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -395,19 +447,20 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
                       onClick={() => { onLabelFilter(null); onFolderChange(folder.id); }}
                       isActive={isActive}
                       className={cn(
-                        "rounded-full px-3 py-2 cursor-pointer transition-all duration-200",
-                        isActive && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground shadow-sm"
+                        "rounded-full px-3 py-2 cursor-pointer transition-colors",
+                        isActive && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
                       )}
                       data-testid={`nav-folder-${folder.id}`}
                     >
-                      <Icon className={cn("w-4 h-4 shrink-0", folder.id === "pending-approvals" ? "text-primary" : "text-muted-foreground/80", isActive && "text-primary")} />
-                      <span className="flex-1 text-sm font-medium">{folder.label}</span>
+                      <Icon className={cn("w-4 h-4 shrink-0", folder.id === "pending-approvals" && "text-primary")} />
+                      <span className="flex-1">{folder.label}</span>
                       {count > 0 && (
                         <span
                           className={cn(
-                            "text-xs font-bold ml-auto px-1.5 rounded-full",
-                            isActive ? "text-sidebar-accent-foreground" : "text-muted-foreground"
+                            "text-xs font-semibold ml-auto",
+                            isActive ? "text-sidebar-accent-foreground" : "text-sidebar-foreground"
                           )}
+                          data-testid={`count-${folder.id}`}
                         >
                           {count}
                         </span>
@@ -425,12 +478,13 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
           onFolderChange={onFolderChange}
           onLabelFilter={onLabelFilter}
           counts={counts}
+          isDemo={isDemo}
         />
 
-        <SidebarGroup className="mt-2 text-muted-foreground/60">
+        <SidebarGroup className="mt-2">
           <div className="flex items-center gap-1 px-3 mb-1">
-            <Tag className="w-3 h-3" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Metadata Tags</span>
+            <Tag className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Labels</span>
           </div>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -442,12 +496,13 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
                       onClick={() => onLabelFilter(isActive ? null : label.id)}
                       isActive={isActive}
                       className={cn(
-                        "rounded-full px-3 py-1 cursor-pointer h-8",
+                        "rounded-full px-3 py-1.5 cursor-pointer",
                         isActive && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
                       )}
+                      data-testid={`nav-label-${label.id}`}
                     >
-                      <span className={cn("w-2 h-2 rounded-full shrink-0 mr-2 shadow-sm", label.color)} />
-                      <span className="text-xs">{label.label}</span>
+                      <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", label.color)} />
+                      <span className="text-sm">{label.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -456,19 +511,19 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <ActiveAgentsSection />
+        <ActiveAgentsSection isDemo={isDemo} />
       </SidebarContent>
 
-      <SidebarFooter className="px-3 pb-6 pt-4 border-t border-sidebar-border/50 bg-sidebar/50">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-sidebar-accent/50 transition-all duration-200 cursor-pointer border border-transparent hover:border-sidebar-border/50">
-          <Avatar className="w-9 h-9 shrink-0 ring-1 ring-primary/20">
-            <AvatarFallback className="bg-gradient-to-br from-primary to-indigo-600 text-white text-[10px] font-black uppercase tracking-tighter shadow-inner">{userInitials || "ME"}</AvatarFallback>
+      <SidebarFooter className="px-3 pb-4 pt-2 border-t border-sidebar-border">
+        <div className="flex items-center gap-3 px-2 py-2 rounded-full hover-elevate cursor-pointer">
+          <Avatar className="w-8 h-8 shrink-0">
+            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">{userInitials || "ME"}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col min-w-0 flex-1">
-            <span className="text-sm font-bold text-sidebar-foreground truncate tracking-tight">{userName || "My Account"}</span>
-            <span className="text-[10px] text-muted-foreground truncate font-mono tracking-tight opacity-60">{mailboxAddress || userEmail || "operator@eomail.co"}</span>
+            <span className="text-sm font-medium text-sidebar-foreground truncate">{userName || "My Account"}</span>
+            <span className="text-xs text-muted-foreground truncate">{mailboxAddress || userEmail || "me@eomail.co"}</span>
           </div>
-          <Settings className="w-4 h-4 text-muted-foreground shrink-0 hover:text-primary transition-colors" />
+          <Settings className="w-4 h-4 text-muted-foreground shrink-0" />
         </div>
       </SidebarFooter>
     </Sidebar>
