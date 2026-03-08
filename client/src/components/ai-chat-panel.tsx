@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -24,14 +24,13 @@ interface AiChatPanelProps {
   isOpen: boolean;
   onToggle: () => void;
   onExpandChange?: (expanded: boolean) => void;
-  emailId?: string;
 }
 
 const QUICK_ACTIONS = [
   { label: "Scan for threats", icon: Shield, prompt: "Aegis, scan my inbox for any phishing or impersonation threats and report what you find." },
   { label: "Financial summary", icon: DollarSign, prompt: "FinOps, give me a summary of all financial emails — invoices, receipts, and subscriptions." },
   { label: "Schedule overview", icon: Calendar, prompt: "Chrono, list all scheduling and meeting requests in my inbox with dates and times." },
-  { label: "Inbox briefing", icon: Sparkles, prompt: "Give me a full AI summary briefing on my inbox status, priorities, and recommended actions." },
+  { label: "Inbox briefing", icon: Sparkles, prompt: "Give me a full Chief of Staff briefing on my inbox status, priorities, and recommended actions." },
 ];
 
 function escapeHtml(str: string): string {
@@ -51,32 +50,13 @@ function formatMessage(content: string): string {
   return html;
 }
 
-export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiChatPanelProps) {
+export function AiChatPanel({ isOpen, onToggle, onExpandChange }: AiChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  const { data: historyData } = useQuery({
-    queryKey: ["/api/ai/chat/history", emailId],
-    queryFn: async () => {
-      const url = emailId ? `/api/ai/chat/history?emailId=${emailId}` : "/api/ai/chat/history";
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch history");
-      return res.json();
-    },
-    enabled: isOpen,
-  });
-
-  useEffect(() => {
-    if (historyData) {
-      setMessages(historyData.map((msg: any) => ({ role: msg.role, content: msg.content })));
-    } else {
-      setMessages([]);
-    }
-  }, [historyData, emailId]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -93,12 +73,12 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
   }, [isOpen]);
 
   useEffect(() => {
-    onExpandChange?.(isFullscreen);
-  }, [onExpandChange, isFullscreen]);
+    onExpandChange?.(false);
+  }, [onExpandChange]);
 
   const chatMutation = useMutation({
     mutationFn: async (newMessages: ChatMessage[]) => {
-      const res = await apiRequest("POST", "/api/ai/chat", { messages: newMessages, emailId });
+      const res = await apiRequest("POST", "/api/ai/chat", { messages: newMessages });
       return res.json();
     },
     onSuccess: (data) => {
@@ -131,20 +111,9 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
     }
   };
 
-  const clearMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("DELETE", "/api/ai/chat/history", { emailId });
-    },
-    onSuccess: () => {
-      setMessages([]);
-      setInput("");
-    },
-  });
-
   const clearChat = () => {
-    if (window.confirm("Are you sure you want to clear this chat history?")) {
-      clearMutation.mutate();
-    }
+    setMessages([]);
+    setInput("");
   };
 
   return (
@@ -152,203 +121,196 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
       {!isOpen && (
         <button
           onClick={onToggle}
-          className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 shadow-2xl shadow-violet-900/40 hover:shadow-violet-700/60 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center group"
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-violet-600 to-indigo-700 shadow-lg shadow-violet-900/40 hover:shadow-violet-700/50 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center group"
           data-testid="button-ai-chat-fab"
         >
-          <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl" />
-          <div className="relative">
-            <MessageSquare className="w-7 h-7 text-white group-hover:scale-110 transition-transform" />
-            <span className="absolute -top-3 -right-3 px-1.5 py-0.5 bg-emerald-400 text-black text-[8px] font-black rounded-full border-4 border-[#0a0a0f] animate-pulse">LIVE</span>
-          </div>
+          <MessageSquare className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-gray-900" />
         </button>
       )}
 
-      {isOpen && (
-        <div
-          className={cn(
-            "fixed z-50 transition-all duration-500 ease-in-out",
-            isFullscreen
-              ? "inset-4 sm:inset-10"
-              : "bottom-6 right-6 w-[420px] h-[680px] max-h-[calc(100vh-60px)]"
-          )}
-          data-testid="panel-ai-chat"
-        >
-          <div className={cn(
-            "relative flex flex-col h-full overflow-hidden",
-            "rounded-3xl border border-white/[0.12]",
-            "bg-[#0a0a0f]/98 backdrop-blur-3xl",
-            "shadow-[0_20px_50px_rgba(0,0,0,0.8)]"
-          )}>
-            <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.08] to-transparent pointer-events-none" />
+      {isOpen && <div
+        className={cn(
+          "fixed z-50",
+          isFullscreen
+            ? "inset-4 sm:inset-8"
+            : "bottom-6 right-6 w-[380px] h-[560px] max-h-[calc(100vh-48px)]"
+        )}
+        data-testid="panel-ai-chat"
+      >
+        <div className={cn(
+          "relative flex flex-col h-full overflow-hidden",
+          "rounded-2xl border border-white/[0.08]",
+          "bg-[#0a0a0f]/95 backdrop-blur-2xl",
+          "shadow-2xl shadow-black/60"
+        )}>
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-violet-500/[0.03] to-transparent pointer-events-none" />
+          <div className="absolute inset-[0] rounded-2xl ring-1 ring-inset ring-white/[0.05] pointer-events-none" />
 
-            <div className="relative flex items-center justify-between px-6 py-5 border-b border-white/[0.08] shrink-0">
-              <div className="flex items-center gap-4">
-                <div className="relative group/bot">
-                  <div className="absolute -inset-1.5 bg-gradient-to-tr from-violet-600 to-indigo-600 rounded-xl blur opacity-30 group-hover/bot:opacity-50 transition duration-300"></div>
-                  <div className="relative w-11 h-11 rounded-xl bg-[#11111a] border border-white/10 flex items-center justify-center shadow-xl">
-                    <Bot className="w-6 h-6 text-white" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-sm font-black tracking-widest text-white uppercase italic">
-                    Command Center
-                  </h3>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                      <span className="text-[9px] text-emerald-400 font-black uppercase tracking-widest">Active Status</span>
-                    </span>
-                  </div>
+          <div className="relative flex items-center justify-between px-4 py-3 border-b border-white/[0.06] shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-600/30">
+                <Bot className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-white/95 leading-tight">
+                  EOMail Chief of Staff
+                </h3>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] text-white/40">EOMail.co</span>
+                  <span className="text-white/20">·</span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[10px] text-emerald-400/80 font-medium">Connected</span>
+                  </span>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                {messages.length > 0 && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 text-white/30 hover:text-white/80 hover:bg-white/[0.08] rounded-xl transition-all"
-                    onClick={clearChat}
-                    data-testid="button-clear-chat"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+            </div>
+            <div className="flex items-center gap-0.5">
+              {messages.length > 0 && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-white/30 hover:text-white/70 hover:bg-white/[0.06] rounded-lg"
+                  onClick={clearChat}
+                  data-testid="button-clear-chat"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              )}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-white/30 hover:text-white/70 hover:bg-white/[0.06] rounded-lg"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                data-testid="button-fullscreen-chat"
+              >
+                {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-white/30 hover:text-white/70 hover:bg-white/[0.06] rounded-lg"
+                onClick={onToggle}
+                data-testid="button-close-chat"
+              >
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="relative flex-1 overflow-y-auto px-4 py-3 space-y-3 scrollbar-thin scrollbar-thumb-white/[0.06] scrollbar-track-transparent">
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full gap-5">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/15 to-indigo-600/15 border border-violet-500/20 flex items-center justify-center">
+                  <Sparkles className="w-7 h-7 text-violet-400/80" />
+                </div>
+                <div className="text-center space-y-1.5">
+                  <p className="text-sm font-medium text-white/70">Your privatized AI assistant</p>
+                  <p className="text-xs text-white/35 max-w-[240px] leading-relaxed">
+                    Full agentic command of your eomail.co inbox — powered by three autonomous agents
+                  </p>
+                </div>
+
+                <div className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-violet-600/20 to-indigo-600/20 border border-violet-500/15 max-w-[280px]">
+                  <p className="text-xs text-violet-200/80 leading-relaxed">
+                    Hello! I'm your EOMail Chief of Staff. How can I help you manage your inbox today?
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-1.5 max-w-[340px] mt-1">
+                  {QUICK_ACTIONS.map((action) => (
+                    <button
+                      key={action.label}
+                      onClick={() => sendMessage(action.prompt)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-white/[0.12] text-[11px] text-white/55 hover:text-white/80 transition-all duration-150"
+                      data-testid={`button-quick-${action.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      <action.icon className="w-3 h-3 shrink-0" />
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {messages.map((msg, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "flex",
+                  msg.role === "user" ? "justify-end" : "justify-start"
                 )}
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 text-white/30 hover:text-white/80 hover:bg-white/[0.08] rounded-xl transition-all"
-                  onClick={() => setIsFullscreen(!isFullscreen)}
-                  data-testid="button-fullscreen-chat"
-                >
-                  {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 text-white/30 hover:text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all ml-1"
-                  onClick={onToggle}
-                  data-testid="button-close-chat"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="relative flex-1 overflow-y-auto px-6 py-6 space-y-6 scrollbar-thin scrollbar-thumb-white/[0.08] scrollbar-track-transparent">
-              {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full gap-8">
-                  <div className="relative px-8">
-                    <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full opacity-20" />
-                    <div className="relative flex flex-col items-center text-center space-y-4">
-                      <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-violet-500/10 to-indigo-600/10 border border-white/5 flex items-center justify-center shadow-2xl">
-                        <Sparkles className="w-10 h-10 text-violet-400" />
-                      </div>
-                      <div className="space-y-2">
-                        <h2 className="text-xl font-bold text-white tracking-tight">How can I assist you?</h2>
-                        <p className="text-sm text-white/40 max-w-[280px] leading-relaxed">
-                          Deploy agentic operations or analyze your private eomail.co communications.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 w-full max-w-[400px]">
-                    {QUICK_ACTIONS.map((action) => (
-                      <button
-                        key={action.label}
-                        onClick={() => sendMessage(action.prompt)}
-                        className="flex flex-col items-start gap-2 p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 text-left group"
-                        data-testid={`button-quick-${action.label.toLowerCase().replace(/\s+/g, "-")}`}
-                      >
-                        <action.icon className="w-4 h-4 text-violet-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[11px] font-bold text-white/60 group-hover:text-white/90">{action.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {messages.map((msg, i) => (
+              >
                 <div
-                  key={i}
                   className={cn(
-                    "flex animate-in fade-in slide-in-from-bottom-2 duration-300",
-                    msg.role === "user" ? "justify-end" : "justify-start"
+                    "max-w-[85%] text-[13px] leading-relaxed",
+                    msg.role === "user"
+                      ? "bg-gradient-to-r from-violet-600/90 to-indigo-600/90 text-white rounded-2xl rounded-br-md px-3.5 py-2.5 shadow-lg shadow-violet-900/20"
+                      : "bg-white/[0.04] text-white/85 border border-white/[0.06] rounded-2xl rounded-bl-md px-3.5 py-2.5"
                   )}
                 >
-                  <div
-                    className={cn(
-                      "max-w-[88%] text-[14px] leading-relaxed shadow-xl",
-                      msg.role === "user"
-                        ? "bg-gradient-to-br from-violet-600 to-indigo-700 text-white rounded-2xl rounded-tr-none px-4 py-3 border border-white/10"
-                        : "bg-white/[0.05] text-white/90 border border-white/[0.08] rounded-2xl rounded-tl-none px-4 py-3"
-                    )}
-                  >
-                    {msg.role === "assistant" && (
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-5 h-5 rounded bg-violet-500/20 flex items-center justify-center">
-                          <Bot className="w-3 h-3 text-violet-400" />
-                        </div>
-                        <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest italic">
-                          AI Assistant
-                        </span>
-                      </div>
-                    )}
-                    <div
-                      className="whitespace-pre-wrap break-words prose-invert font-medium [&_strong]:text-white [&_strong]:font-black [&_code]:bg-white/10 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_li]:my-1"
-                      dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }}
-                    />
-                  </div>
-                </div>
-              ))}
-
-              {chatMutation.isPending && (
-                <div className="flex justify-start">
-                  <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl rounded-tl-none px-5 py-4 flex items-center gap-3">
-                    <div className="flex gap-1">
-                      <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                      <span className="w-1.5 h-1.5 bg-violet-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                      <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
+                  {msg.role === "assistant" && (
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Bot className="w-3 h-3 text-violet-400" />
+                      <span className="text-[10px] font-semibold text-violet-400/80 uppercase tracking-wider">
+                        Chief of Staff
+                      </span>
                     </div>
-                    <span className="text-xs font-bold text-white/30 uppercase tracking-widest">Synthesizing Inbox Intelligence...</span>
+                  )}
+                  <div
+                    className="whitespace-pre-wrap break-words [&_strong]:font-semibold [&_em]:italic [&_code]:text-violet-300 [&_li]:py-0.5"
+                    dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }}
+                  />
+                </div>
+              </div>
+            ))}
+
+            {chatMutation.isPending && (
+              <div className="flex justify-start">
+                <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl rounded-bl-md px-3.5 py-3">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 text-violet-400 animate-spin" />
+                    <span className="text-xs text-white/40">Analyzing your inbox...</span>
                   </div>
                 </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-
-            <div className="relative px-6 py-6 shrink-0 border-t border-white/[0.05] bg-[#0d0d15]/50">
-              <div className="flex items-end gap-3 bg-white/[0.03] border border-white/[0.08] rounded-2xl p-3 focus-within:border-primary/40 focus-within:bg-white/[0.06] transition-all duration-300 shadow-inner">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Message your AI Assistant..."
-                  className="flex-1 bg-transparent border-0 outline-none text-[14px] text-white/90 placeholder:text-white/20 resize-none min-h-[24px] max-h-[140px] py-1 px-1 font-medium"
-                  rows={1}
-                  data-testid="input-ai-chat"
-                />
-                <Button
-                  size="icon"
-                  className={cn(
-                    "h-9 w-9 shrink-0 rounded-xl transition-all duration-300",
-                    input.trim()
-                      ? "bg-gradient-to-r from-violet-600 to-indigo-600 hover:scale-105 shadow-lg shadow-violet-900/40 text-white"
-                      : "bg-white/[0.03] text-white/10"
-                  )}
-                  onClick={() => sendMessage(input)}
-                  disabled={!input.trim() || chatMutation.isPending}
-                  data-testid="button-send-chat"
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
               </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="relative px-3 py-3 shrink-0 border-t border-white/[0.04]">
+            <div className="flex items-end gap-2 bg-white/[0.04] border border-white/[0.07] rounded-xl px-3 py-2 focus-within:border-violet-500/30 focus-within:bg-white/[0.06] transition-all duration-200">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about your inbox..."
+                className="flex-1 bg-transparent border-0 outline-none text-[13px] text-white/85 placeholder:text-white/25 resize-none min-h-[20px] max-h-[80px]"
+                rows={1}
+                data-testid="input-ai-chat"
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                className={cn(
+                  "h-7 w-7 shrink-0 rounded-lg transition-all duration-200",
+                  input.trim()
+                    ? "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-md shadow-violet-900/30"
+                    : "text-white/20 hover:text-white/40 hover:bg-white/[0.06]"
+                )}
+                onClick={() => sendMessage(input)}
+                disabled={!input.trim() || chatMutation.isPending}
+                data-testid="button-send-chat"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </Button>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </>
   );
 }

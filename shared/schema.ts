@@ -1,10 +1,10 @@
-import { pgTable, text, varchar, boolean, timestamp, integer, index, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, integer, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
@@ -23,8 +23,8 @@ export const users = pgTable("users", {
 ]);
 
 export const emails = pgTable("emails", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   from: text("from").notNull(),
   fromEmail: text("from_email").notNull(),
   to: text("to").notNull(),
@@ -59,12 +59,12 @@ export const emails = pgTable("emails", {
 ]);
 
 export const agentActivity = pgTable("agent_activity", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   agentName: text("agent_name"),
   action: text("action").notNull(),
   status: text("status").notNull().default("pending"),
-  emailId: uuid("email_id"),
+  emailId: varchar("email_id"),
   detail: text("detail"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -72,10 +72,10 @@ export const agentActivity = pgTable("agent_activity", {
 ]);
 
 export const customFolders = pgTable("custom_folders", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  parentId: uuid("parent_id"),
+  parentId: varchar("parent_id"),
   icon: text("icon").default("folder"),
   color: text("color").default("blue"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -85,10 +85,10 @@ export const customFolders = pgTable("custom_folders", {
 ]);
 
 export const aiChatHistory = pgTable("ai_chat_history", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  emailId: uuid("email_id").references(() => emails.id, { onDelete: "set null" }), // Optional context
-  role: text("role").notNull(), // 'user' or 'assistant'
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emailId: varchar("email_id"),
+  role: text("role").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -96,6 +96,10 @@ export const aiChatHistory = pgTable("ai_chat_history", {
   index("ai_chat_history_email_idx").on(table.emailId),
   index("ai_chat_history_created_at_idx").on(table.createdAt),
 ]);
+
+export const insertAiChatHistorySchema = createInsertSchema(aiChatHistory).omit({ id: true, createdAt: true });
+export type InsertAiChatHistory = z.infer<typeof insertAiChatHistorySchema>;
+export type AiChatHistory = typeof aiChatHistory.$inferSelect;
 
 export const insertCustomFolderSchema = createInsertSchema(customFolders).omit({ id: true, createdAt: true });
 export type InsertCustomFolder = z.infer<typeof insertCustomFolderSchema>;
@@ -113,16 +117,5 @@ export const insertAgentActivitySchema = createInsertSchema(agentActivity).omit(
 export type InsertAgentActivity = z.infer<typeof insertAgentActivitySchema>;
 export type AgentActivity = typeof agentActivity.$inferSelect;
 
-export const insertAiChatHistorySchema = createInsertSchema(aiChatHistory).omit({ id: true, createdAt: true });
-export type InsertAiChatHistory = z.infer<typeof insertAiChatHistorySchema>;
-export type AiChatHistory = typeof aiChatHistory.$inferSelect;
-
 export type EmailFolder = "inbox" | "starred" | "sent" | "drafts" | "archive" | "spam" | "trash" | "all";
-
-// Session table for connect-pg-simple
-export const sessions = pgTable("session", {
-  sid: text("sid").primaryKey(),
-  sess: text("sess").notNull(),
-  expire: timestamp("expire", { precision: 6 }).notNull(),
-});
 

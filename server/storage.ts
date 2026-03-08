@@ -160,7 +160,7 @@ export class DatabaseStorage implements IStorage {
     if (updates.length === 0) return [];
 
     const ids = updates.map(u => u.id);
-    const allKeys = Array.from(new Set(updates.flatMap(u => Object.keys(u.values))));
+    const allKeys = new Set(updates.flatMap(u => Object.keys(u.values)));
 
     const caseStatements: Record<string, any> = { id: emails.id };
 
@@ -338,13 +338,11 @@ export class DatabaseStorage implements IStorage {
 
   async getAiChatHistory(userId: string, emailId?: string | null): Promise<AiChatHistory[]> {
     const conditions = [eq(aiChatHistory.userId, userId)];
-
     if (emailId) {
       conditions.push(eq(aiChatHistory.emailId, emailId));
-    } else if (emailId === null) {
+    } else {
       conditions.push(sql`${aiChatHistory.emailId} IS NULL`);
     }
-
     return db
       .select()
       .from(aiChatHistory)

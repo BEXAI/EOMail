@@ -57,7 +57,7 @@ export async function sendPasswordResetEmail(to: string, token: string, displayN
         <a href="${resetUrl}" style="display: inline-block; background: #0f172a; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 16px 0;">Reset Password</a>
         <p style="color: #64748b; font-size: 13px;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="color: #94a3b8; font-size: 12px;">EOMail.co — Your Optimized AI Assistant</p>
+        <p style="color: #94a3b8; font-size: 12px;">EOMail.co — Your autonomous Chief of Staff</p>
       </div>
     `,
   });
@@ -79,7 +79,7 @@ export async function sendVerificationEmail(to: string, token: string, displayNa
         <a href="${verifyUrl}" style="display: inline-block; background: #0f172a; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 16px 0;">Verify Email</a>
         <p style="color: #64748b; font-size: 13px;">If you didn't create an account, you can safely ignore this email.</p>
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="color: #94a3b8; font-size: 12px;">EOMail.co — Your Optimized AI Assistant</p>
+        <p style="color: #94a3b8; font-size: 12px;">EOMail.co — Your autonomous Chief of Staff</p>
       </div>
     `,
   });

@@ -57,14 +57,11 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
       detail: null,
     });
 
-    const user = await storage.getUser(userId);
-    const userEmailAddrs = [user?.email, user?.mailboxAddress].filter(Boolean);
-
     let aiDraftReplyText: string | null = null;
     if (
       email.folder === "inbox" &&
       classification.suggestedAction === "reply" &&
-      !userEmailAddrs.includes(email.fromEmail)
+      email.fromEmail !== "me@eomail.co"
     ) {
       aiDraftReplyText = await draftReply(email, displayName, undefined, userId);
     }
