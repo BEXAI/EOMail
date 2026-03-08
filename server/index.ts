@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
+import { initSchema } from "./db";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
@@ -73,6 +74,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await initSchema();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

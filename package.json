@@ -8,7 +8,8 @@
     "build": "npx tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "npx drizzle-kit push"
+    "db:push": "npx drizzle-kit push",
+    "db:init": "npx tsx script/init-db.ts"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.4",
