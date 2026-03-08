@@ -119,3 +119,10 @@ export type AiChatHistory = typeof aiChatHistory.$inferSelect;
 
 export type EmailFolder = "inbox" | "starred" | "sent" | "drafts" | "archive" | "spam" | "trash" | "all";
 
+// Session table for connect-pg-simple
+export const sessions = pgTable("session", {
+  sid: text("sid").primaryKey(),
+  sess: text("sess").notNull(),
+  expire: timestamp("expire", { precision: 6 }).notNull(),
+});
+
