@@ -171,7 +171,7 @@ export async function executePrompt(
         jsonMode: options?.jsonMode,
       }, isComplex);
 
-      console.log(`[API Gateway] Engine=Gemini Task=${promptResult.taskType} Latency=${Date.now() - startTime}ms`);
+      console.log(`[API Gateway] Engine=Gemini 3 Task=${promptResult.taskType} Latency=${Date.now() - startTime}ms`);
       return { content, engine: "gemini", taskType: promptResult.taskType };
     } catch (error) {
       console.error(`[API Gateway] Gemini failed for ${promptResult.taskType}:`, error instanceof Error ? error.message : error);
@@ -239,7 +239,7 @@ export async function executeMultiTurnChat(
       const lastMsg = filteredMessages[filteredMessages.length - 1].content;
       const result = await withTimeout(chat.sendMessage(lastMsg), RETRY_CONFIG.timeout_ms);
       const content = result.response.text();
-      console.log(`[API Gateway] Chat Engine=Gemini Latency=${Date.now() - startTime}ms`);
+      console.log(`[API Gateway] Chat Engine=Gemini 3 Latency=${Date.now() - startTime}ms`);
       return content;
     } catch (error) {
       console.error("[API Gateway] Gemini Chat failed:", error instanceof Error ? error.message : error);

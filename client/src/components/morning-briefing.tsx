@@ -125,8 +125,8 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
                 <Sparkles className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <span className="text-xs font-black tracking-[0.2em] text-primary uppercase">AI Inbox Assistant</span>
-                <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest mt-0.5 self-start">Optimized Tools Running // System v2.4</p>
+                <span className="text-xs font-black tracking-[0.2em] text-primary uppercase">Gemini 3 Intelligent Assistant</span>
+                <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest mt-0.5 self-start">Optimized Intelligence // System v3.0</p>
               </div>
               <Badge variant="outline" className="ml-auto text-[9px] font-black border-emerald-500/30 text-emerald-400 bg-emerald-500/5 px-2 py-0.5 rounded-md uppercase tracking-tighter">
                 Live Analysis

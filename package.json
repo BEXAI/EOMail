@@ -9,7 +9,8 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "npx drizzle-kit push",
-    "db:init": "npx tsx script/init-db.ts"
+    "db:init": "npx tsx script/init-db.ts",
+    "gemini:3": "npx tsx script/execute-gemini-3.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
