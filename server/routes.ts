@@ -635,7 +635,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!webhookSecret) {
         return res.status(503).json({ error: "Webhook not configured" });
       }
-      const providedSecret = String(req.headers["x-webhook-secret"] || req.query.secret || "");
+      const providedSecret = String(req.headers["x-webhook-secret"] || "");
       if (
         providedSecret.length !== webhookSecret.length ||
         !crypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(webhookSecret))

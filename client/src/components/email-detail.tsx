@@ -534,41 +534,51 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
 
           {email.aiProcessed && (
             <Collapsible defaultOpen>
-              <Card className="mb-4 border-border bg-muted/30" data-testid="ai-insights-card">
+              <Card className="mb-6 eomail-glass border-primary/20 overflow-hidden shadow-2xl shadow-indigo-500/5 group" data-testid="ai-insights-card">
                 <CollapsibleTrigger className="w-full">
-                  <CardContent className="p-3 flex items-center gap-2 cursor-pointer">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-semibold text-foreground">AI Insights</span>
-                    {email.aiUrgency && urgency && (
-                      <Badge className={cn("text-xs ml-auto", urgency.bg, urgency.text)} variant="secondary">
-                        {urgency.label} Urgency
-                      </Badge>
-                    )}
-                    {email.aiCategory && (
-                      <Badge variant="outline" className="text-xs">
-                        {categoryIcons[email.aiCategory] || "📧"} {email.aiCategory}
-                      </Badge>
-                    )}
-                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-1" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <CardContent className="p-4 flex items-center gap-3 cursor-pointer relative z-10">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Intelligence View</p>
+                      <p className="text-sm font-bold text-foreground">AI Semantic Analysis</p>
+                    </div>
+                    <div className="ml-auto flex items-center gap-2">
+                      {email.aiUrgency && urgency && (
+                        <Badge className={cn("text-[10px] font-bold uppercase tracking-tighter", urgency.bg, urgency.text)} variant="secondary">
+                          {urgency.label} Priority
+                        </Badge>
+                      )}
+                      {email.aiCategory && (
+                        <Badge variant="outline" className="text-[10px] font-bold uppercase border-primary/20 bg-primary/5">
+                          {categoryIcons[email.aiCategory] || "📧"} {email.aiCategory}
+                        </Badge>
+                      )}
+                      <ChevronDown className="w-4 h-4 text-muted-foreground ml-1" />
+                    </div>
                   </CardContent>
                 </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="px-3 pb-3 space-y-3">
+                <CollapsibleContent className="relative z-10">
+                  <div className="px-4 pb-4 space-y-4">
                     {email.aiSummary && (
-                      <div className="bg-primary/5 rounded-md p-3">
-                        <p className="text-sm text-foreground/80" data-testid="ai-summary">
-                          {email.aiSummary}
+                      <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
+                        <p className="text-sm text-foreground/90 leading-relaxed italic font-medium" data-testid="ai-summary">
+                          "{email.aiSummary}"
                         </p>
                       </div>
                     )}
                     {email.aiSuggestedAction && (
-                      <div className="flex items-center gap-2">
-                        <Zap className="w-3.5 h-3.5 text-orange-500" />
-                        <span className="text-xs text-muted-foreground">AI suggests:</span>
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                        <div className="flex items-center gap-2">
+                          <Zap className="w-4 h-4 text-orange-500" />
+                          <span className="text-xs font-semibold text-muted-foreground">Recommended Action</span>
+                        </div>
                         <Button
                           size="sm"
                           variant="secondary"
-                          className="text-xs h-6 px-2"
+                          className="text-xs h-7 px-4 font-bold rounded-lg hover:scale-105 transition-transform"
                           onClick={handleSuggestedAction}
                           data-testid="button-suggested-action"
                         >

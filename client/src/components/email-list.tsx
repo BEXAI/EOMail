@@ -200,7 +200,7 @@ export function EmailList({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div className="flex-1 overflow-y-auto scrollbar-thin animate-stagger-fade-in">
         {emails.map((email) => {
           const isSelected = selectedId === email.id;
           const isHovered = hoveredId === email.id;
@@ -222,16 +222,20 @@ export function EmailList({
               onMouseLeave={() => setHoveredId(null)}
               data-testid={`email-item-${email.id}`}
               className={cn(
-                "flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-border transition-all duration-150 relative group outline-none",
-                "focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset",
+                "flex items-start gap-4 px-4 py-4 cursor-pointer border-b border-border/50 transition-all duration-200 relative group outline-none",
+                "focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-inset",
                 isSelected
-                  ? "bg-primary/8 border-l-[3px] border-l-primary"
+                  ? "bg-primary/[0.07] border-l-[4px] border-l-primary shadow-inner"
                   : !email.read
-                  ? "bg-background hover:bg-muted/40"
-                  : "bg-muted/20 hover:bg-muted/50",
-                isSelected && "pl-[13px]"
+                    ? "bg-background hover:bg-muted/40"
+                    : "bg-muted/10 hover:bg-muted/30 opacity-90 hover:opacity-100",
+                isSelected && "pl-[12px]"
               )}
             >
+              {/* Active Indicator Glow */}
+              {isSelected && (
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent pointer-events-none" />
+              )}
               <div className="flex items-center gap-2 mt-1 shrink-0">
                 <div
                   onClick={(e) => toggleCheck(email.id, e)}

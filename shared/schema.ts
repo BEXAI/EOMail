@@ -1,10 +1,10 @@
-import { pgTable, text, varchar, boolean, timestamp, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, integer, index, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").primaryKey().defaultRandom(),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
@@ -23,8 +23,8 @@ export const users = pgTable("users", {
 ]);
 
 export const emails = pgTable("emails", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   from: text("from").notNull(),
   fromEmail: text("from_email").notNull(),
   to: text("to").notNull(),
@@ -59,12 +59,12 @@ export const emails = pgTable("emails", {
 ]);
 
 export const agentActivity = pgTable("agent_activity", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   agentName: text("agent_name"),
   action: text("action").notNull(),
   status: text("status").notNull().default("pending"),
-  emailId: varchar("email_id"),
+  emailId: uuid("email_id"),
   detail: text("detail"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -72,10 +72,10 @@ export const agentActivity = pgTable("agent_activity", {
 ]);
 
 export const customFolders = pgTable("custom_folders", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  parentId: varchar("parent_id"),
+  parentId: uuid("parent_id"),
   icon: text("icon").default("folder"),
   color: text("color").default("blue"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -85,9 +85,9 @@ export const customFolders = pgTable("custom_folders", {
 ]);
 
 export const aiChatHistory = pgTable("ai_chat_history", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  emailId: varchar("email_id").references(() => emails.id, { onDelete: "set null" }), // Optional context
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emailId: uuid("email_id").references(() => emails.id, { onDelete: "set null" }), // Optional context
   role: text("role").notNull(), // 'user' or 'assistant'
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

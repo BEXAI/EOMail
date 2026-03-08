@@ -57,11 +57,12 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
       detail: null,
     });
 
+    const domain = process.env.DOMAIN || "eomail.co";
     let aiDraftReplyText: string | null = null;
     if (
       email.folder === "inbox" &&
       classification.suggestedAction === "reply" &&
-      email.fromEmail !== "me@eomail.co"
+      email.fromEmail !== `me@${domain}`
     ) {
       aiDraftReplyText = await draftReply(email, displayName, undefined, userId);
     }
