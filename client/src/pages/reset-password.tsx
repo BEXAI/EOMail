@@ -27,8 +27,8 @@ export default function ResetPasswordPage() {
       setError("Passwords do not match");
       return;
     }
-    if (password.length < 12) {
-      setError("Password must be at least 12 characters");
+    if (password.length < 4) {
+      setError("Password must be at least 4 characters");
       return;
     }
 
