@@ -14,6 +14,7 @@ const allowlist = [
   "express-session",
   "helmet",
   "openai",
+  "@google/generative-ai",
   "p-limit",
   "passport",
   "passport-local",
