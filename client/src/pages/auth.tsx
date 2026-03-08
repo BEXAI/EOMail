@@ -43,7 +43,7 @@ export default function AuthPage() {
               </h1>
               <div className="flex items-center justify-center gap-2">
                 <span className="h-px w-8 bg-gradient-to-r from-transparent to-primary/50"></span>
-                <p className="text-[11px] font-black text-primary tracking-[0.2em] uppercase text-shadow-glow">Optimized AI Intelligence</p>
+                <p className="text-[11px] font-black text-primary tracking-[0.2em] uppercase text-shadow-glow">Optimized AI Tools</p>
                 <span className="h-px w-8 bg-gradient-to-l from-transparent to-primary/50"></span>
               </div>
             </div>
@@ -183,7 +183,7 @@ function RegisterForm({ registerMutation }: { registerMutation: any }) {
     <Card className="border-0 bg-transparent shadow-none px-6 pb-6 pt-2">
       <CardHeader className="text-center pb-6">
         <CardTitle className="text-2xl font-black tracking-tight text-white uppercase italic">Sign Up</CardTitle>
-        <CardDescription className="text-white/40 font-bold text-[11px] uppercase tracking-wider">Create your intelligent core account</CardDescription>
+        <CardDescription className="text-white/40 font-bold text-[11px] uppercase tracking-wider">Create your optimized EOMail account</CardDescription>
       </CardHeader>
       <CardContent className="p-0">
         <form onSubmit={handleSubmit} className="space-y-4">

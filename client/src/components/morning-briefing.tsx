@@ -141,7 +141,7 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
             ) : (
               <div className="relative">
                 <p className="text-lg text-white/90 leading-relaxed font-semibold pr-4" data-testid="briefing-text">
-                  {briefingData?.briefing || "Enable AI tools to analyze your inbox intelligence and generate smart briefings."}
+                  {briefingData?.briefing || "Enable AI tools to analyze your inbox and generate smart briefings."}
                 </p>
                 <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-[#0a0a0f] to-transparent pointer-events-none" />
               </div>

@@ -31,7 +31,7 @@ const QUICK_ACTIONS = [
   { label: "Scan for threats", icon: Shield, prompt: "Aegis, scan my inbox for any phishing or impersonation threats and report what you find." },
   { label: "Financial summary", icon: DollarSign, prompt: "FinOps, give me a summary of all financial emails — invoices, receipts, and subscriptions." },
   { label: "Schedule overview", icon: Calendar, prompt: "Chrono, list all scheduling and meeting requests in my inbox with dates and times." },
-  { label: "Inbox briefing", icon: Sparkles, prompt: "Give me a full Chief of Staff briefing on my inbox status, priorities, and recommended actions." },
+  { label: "Inbox briefing", icon: Sparkles, prompt: "Give me a full AI summary briefing on my inbox status, priorities, and recommended actions." },
 ];
 
 function escapeHtml(str: string): string {
@@ -290,7 +290,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
                           <Bot className="w-3 h-3 text-violet-400" />
                         </div>
                         <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest italic">
-                          Chief of Staff
+                          AI Assistant
                         </span>
                       </div>
                     )}
@@ -325,7 +325,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Message your Chief of Staff..."
+                  placeholder="Message your AI Assistant..."
                   className="flex-1 bg-transparent border-0 outline-none text-[14px] text-white/90 placeholder:text-white/20 resize-none min-h-[24px] max-h-[140px] py-1 px-1 font-medium"
                   rows={1}
                   data-testid="input-ai-chat"

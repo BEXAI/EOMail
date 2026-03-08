@@ -542,7 +542,7 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
                       <Sparkles className="w-4 h-4 text-primary" />
                     </div>
                     <div className="text-left">
-                      <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Intelligence View</p>
+                      <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Email Summary</p>
                       <p className="text-sm font-bold text-foreground">AI Semantic Analysis</p>
                     </div>
                     <div className="ml-auto flex items-center gap-2">
