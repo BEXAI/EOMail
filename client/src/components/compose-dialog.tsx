@@ -17,6 +17,7 @@ import {
   Trash2,
   Send,
   Save,
+  Sparkles,
 } from "lucide-react";
 import { type Email } from "@shared/schema";
 
@@ -155,8 +156,18 @@ export function ComposeDialog({ isOpen, onClose, onSend, onSaveDraft, onDiscardD
 
   const handleSend = () => {
     if (!to) return;
+
+    // Default to @eomail.co if no domain is provided
+    const formattedTo = to.split(",").map(email => {
+      const trimmed = email.trim();
+      if (trimmed && !trimmed.includes("@")) {
+        return `${trimmed}@eomail.co`;
+      }
+      return trimmed;
+    }).join(", ");
+
     isSendingRef.current = true;
-    onSend({ to, cc, bcc, subject, body });
+    onSend({ to: formattedTo, cc, bcc, subject, body });
   };
 
   const handleManualSaveDraft = () => {
@@ -179,52 +190,54 @@ export function ComposeDialog({ isOpen, onClose, onSend, onSaveDraft, onDiscardD
         aria-modal="true"
         aria-label={replyTo ? `Reply to ${replyTo.from}` : editDraft ? "Edit draft" : "New message"}
         className={cn(
-          "fixed z-50 bg-card border border-card-border shadow-2xl flex flex-col transition-all duration-200",
-          "animate-in slide-in-from-bottom-4 fade-in duration-200",
+          "fixed z-50 eomail-glass border-primary/20 shadow-2xl flex flex-col transition-all duration-300 ease-out",
+          "animate-in slide-in-from-bottom-8 fade-in duration-500",
           maximized
-            ? "inset-4 rounded-lg"
+            ? "inset-4 rounded-2xl"
             : minimized
-            ? "bottom-0 right-6 w-80 h-12 rounded-t-lg overflow-hidden"
-            : "bottom-0 right-4 md:right-6 w-[calc(100vw-2rem)] md:w-[520px] h-[500px] rounded-t-lg"
+              ? "bottom-0 right-8 w-80 h-14 rounded-t-2xl overflow-hidden"
+              : "bottom-0 right-4 md:right-8 w-[calc(100vw-2rem)] md:w-[600px] h-[600px] rounded-t-3xl shadow-primary/10"
         )}
       >
         <div
-          className="flex items-center justify-between px-4 py-3 bg-muted/50 rounded-t-lg cursor-pointer shrink-0"
+          className="flex items-center justify-between px-6 py-4 bg-primary/[0.05] border-b border-primary/10 rounded-t-3xl cursor-pointer shrink-0 group"
           onClick={() => minimized && setMinimized(false)}
         >
-          <span className="font-semibold text-sm text-foreground truncate mr-2">
-            {replyTo ? `Reply to: ${replyTo.from}` : editDraft ? `Draft: ${editDraft.subject || "Untitled"}` : "New Message"}
-          </span>
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+            </div>
+            <span className="font-black text-[11px] uppercase tracking-[0.2em] text-foreground italic">
+              {replyTo ? "Reply" : editDraft ? "Edit Draft" : "New Message"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <Button
               size="icon"
               variant="ghost"
-              className="h-6 w-6"
+              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.05]"
               onClick={() => setMinimized(!minimized)}
               aria-label={minimized ? "Expand" : "Minimize"}
-              data-testid="button-minimize-compose"
             >
-              <Minimize2 className="w-3.5 h-3.5" />
+              <Minimize2 className="w-4 h-4" />
             </Button>
             <Button
               size="icon"
               variant="ghost"
-              className="h-6 w-6"
+              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.05]"
               onClick={() => setMaximized(!maximized)}
               aria-label={maximized ? "Restore" : "Maximize"}
-              data-testid="button-maximize-compose"
             >
-              <Maximize2 className="w-3.5 h-3.5" />
+              <Maximize2 className="w-4 h-4" />
             </Button>
             <Button
               size="icon"
               variant="ghost"
-              className="h-6 w-6"
+              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10"
               onClick={handleClose}
               aria-label="Close and save draft"
-              data-testid="button-close-compose"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </Button>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type Email } from "@shared/schema";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -34,8 +34,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useEmailActions } from "@/hooks/use-email-actions";
-import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 
 const FOLDER_LABELS: Record<string, string> = {
   inbox: "Inbox",
@@ -62,6 +60,7 @@ export default function MailPage() {
   const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
+  const [chatPanelExpanded, setChatPanelExpanded] = useState(true);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user, logoutMutation } = useAuth();
@@ -71,7 +70,7 @@ export default function MailPage() {
   if (search) queryParams.append("search", search);
   if (labelFilter) queryParams.append("label", labelFilter);
 
-  const { data: emails = [], isLoading: emailsLoading } = useQuery<Email[]> ({
+  const { data: emails = [], isLoading: emailsLoading } = useQuery<Email[]>({
     queryKey: ["/api/emails", folder, search, labelFilter],
     queryFn: async () => {
       const res = await fetch(`/api/emails?${queryParams}`, { credentials: "include" });
@@ -103,13 +102,72 @@ export default function MailPage() {
     setSearchInput("");
   }, []);
 
-  const {
-    markReadMutation,
-    starMutation,
-    deleteMutation,
-    moveMutation,
-    archiveMutation,
-  } = useEmailActions(selectedEmail, setSelectedEmail, folder);
+  const markReadMutation = useMutation({
+    mutationFn: async ({ id, read }: { id: string; read: boolean }) => {
+      await apiRequest("PATCH", `/api/emails/${id}`, { read });
+    },
+    onSuccess: (_, { id, read }) => {
+      invalidateAll();
+      if (selectedEmail?.id === id) {
+        setSelectedEmail((prev) => prev ? { ...prev, read } : null);
+      }
+    },
+    onError: () => { toast({ title: "Failed to update", variant: "destructive" }); },
+  });
+
+  const starMutation = useMutation({
+    mutationFn: async ({ id, starred }: { id: string; starred: boolean }) => {
+      await apiRequest("PATCH", `/api/emails/${id}`, { starred });
+    },
+    onSuccess: (_, { id, starred }) => {
+      invalidateAll();
+      if (selectedEmail?.id === id) {
+        setSelectedEmail((prev) => prev ? { ...prev, starred } : null);
+      }
+    },
+    onError: () => { toast({ title: "Failed to star email", variant: "destructive" }); },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      if (folder === "trash") {
+        await apiRequest("DELETE", `/api/emails/${id}`);
+      } else {
+        await apiRequest("PATCH", `/api/emails/${id}`, { folder: "trash" });
+      }
+    },
+    onSuccess: (_, id) => {
+      invalidateAll();
+      if (selectedEmail?.id === id) setSelectedEmail(null);
+      toast({ title: folder === "trash" ? "Email deleted permanently" : "Moved to trash" });
+    },
+    onError: () => { toast({ title: "Failed to delete", variant: "destructive" }); },
+  });
+
+  const moveMutation = useMutation({
+    mutationFn: async ({ id, targetFolder }: { id: string; targetFolder: string }) => {
+      await apiRequest("PATCH", `/api/emails/${id}`, { folder: targetFolder });
+    },
+    onSuccess: (_, { id, targetFolder }) => {
+      invalidateAll();
+      if (selectedEmail?.id === id) setSelectedEmail(null);
+      const folderLabel = targetFolder.startsWith("custom:") ? targetFolder.replace("custom:", "") : (FOLDER_LABELS[targetFolder] || targetFolder);
+      toast({ title: `Moved to ${folderLabel}` });
+    },
+    onError: () => { toast({ title: "Failed to move email", variant: "destructive" }); },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PATCH", `/api/emails/${id}`, { folder: "archive" });
+    },
+    onSuccess: (_, id) => {
+      invalidateAll();
+      if (selectedEmail?.id === id) setSelectedEmail(null);
+      toast({ title: "Archived" });
+    },
+    onError: () => { toast({ title: "Failed to archive", variant: "destructive" }); },
+  });
 
   const sendMutation = useMutation({
     mutationFn: async (data: ComposeData & { draftId?: string }) => {
@@ -218,8 +276,8 @@ export default function MailPage() {
     onError: () => { toast({ title: "Bulk action failed", variant: "destructive" }); },
   });
 
-  const handleSelectEmail = useCallback((email: Email | null) => {
-    if (folder === "drafts" && email) {
+  const handleSelectEmail = useCallback((email: Email) => {
+    if (folder === "drafts") {
       setEditingDraft(email);
       setReplyTo(null);
       setComposePrefill(null);
@@ -227,7 +285,7 @@ export default function MailPage() {
       return;
     }
     setSelectedEmail(email);
-    if (email && !email.read) markReadMutation.mutate({ id: email.id, read: true });
+    if (!email.read) markReadMutation.mutate({ id: email.id, read: true });
   }, [markReadMutation, folder]);
 
   const handleFolderChange = useCallback((newFolder: string) => {
@@ -328,20 +386,93 @@ export default function MailPage() {
     setComposing(true);
   }, []);
 
-  useKeyboardShortcuts({
-    composing,
-    selectedEmail,
-    emails,
-    handleCompose,
-    handleReply,
-    handleSelectEmail,
-    closeCompose,
-    starMutation,
-    archiveMutation,
-    deleteMutation,
-    searchRef,
-    setCommandBarOpen,
-  });
+  useEffect(() => {
+    return () => {
+      if (undoTimer) clearTimeout(undoTimer);
+    };
+  }, [undoTimer]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandBarOpen(true);
+        return;
+      }
+
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+      if (isInput) return;
+
+      switch (e.key) {
+        case "c":
+          e.preventDefault();
+          handleCompose();
+          break;
+        case "r":
+          if (selectedEmail) {
+            e.preventDefault();
+            handleReply(selectedEmail);
+          }
+          break;
+        case "s":
+          if (selectedEmail) {
+            e.preventDefault();
+            starMutation.mutate({ id: selectedEmail.id, starred: !selectedEmail.starred });
+          }
+          break;
+        case "e":
+          if (selectedEmail) {
+            e.preventDefault();
+            archiveMutation.mutate(selectedEmail.id);
+          }
+          break;
+        case "#":
+          if (selectedEmail) {
+            e.preventDefault();
+            deleteMutation.mutate(selectedEmail.id);
+          }
+          break;
+        case "/":
+          e.preventDefault();
+          searchRef.current?.focus();
+          break;
+        case "Escape":
+          if (composing) {
+            closeCompose();
+          } else if (selectedEmail) {
+            setSelectedEmail(null);
+          }
+          break;
+        case "j": {
+          e.preventDefault();
+          const currentIndex = emails.findIndex((em) => em.id === selectedEmail?.id);
+          if (currentIndex < emails.length - 1) {
+            handleSelectEmail(emails[currentIndex + 1]);
+          } else if (currentIndex === -1 && emails.length > 0) {
+            handleSelectEmail(emails[0]);
+          }
+          break;
+        }
+        case "k": {
+          e.preventDefault();
+          const currentIdx = emails.findIndex((em) => em.id === selectedEmail?.id);
+          if (currentIdx > 0) {
+            handleSelectEmail(emails[currentIdx - 1]);
+          }
+          break;
+        }
+        case "Enter":
+          if (!selectedEmail && emails.length > 0) {
+            handleSelectEmail(emails[0]);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedEmail, composing, emails, handleCompose, handleReply, handleSelectEmail, closeCompose]);
 
   const sidebarStyle = {
     "--sidebar-width": "15rem",
@@ -545,7 +676,7 @@ export default function MailPage() {
       />
 
       <AiCommandBar open={commandBarOpen} onOpenChange={setCommandBarOpen} />
-      <AiChatPanel isOpen={chatPanelOpen} onToggle={() => setChatPanelOpen(!chatPanelOpen)} />
+      <AiChatPanel isOpen={chatPanelOpen} onToggle={() => setChatPanelOpen(!chatPanelOpen)} onExpandChange={setChatPanelExpanded} emailId={selectedEmail?.id} />
     </SidebarProvider>
   );
 }
