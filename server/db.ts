@@ -5,8 +5,21 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Safe path resolution for bundled environment
+let projectDir = process.cwd();
+try {
+  // Check if we are in an ESM environment with import.meta.url
+  if (typeof import.meta !== 'undefined' && import.meta && import.meta.url) {
+    const __filename = fileURLToPath(import.meta.url);
+    projectDir = path.dirname(path.dirname(__filename));
+  } else {
+    // Fallback for CJS/Bundled environments
+    projectDir = path.resolve(__dirname, "..");
+  }
+} catch (e) {
+  // Broad fallback for any resolution error
+  projectDir = path.resolve(__dirname, "..");
+}
 
 if (!process.env.DATABASE_URL) {
   console.warn("WARNING: DATABASE_URL must be set. Ensure the database is provisioned.");
@@ -31,17 +44,25 @@ export async function initSchema() {
     try {
       // Look for schema.sql in project root (common in Render/Replit) or local dir
       const sqlPaths = [
-        path.resolve(__dirname, "../schema.sql"),
+        path.resolve(projectDir, "schema.sql"),
         path.resolve(process.cwd(), "schema.sql")
       ];
 
       let sqlFile = sqlPaths.find(p => fs.existsSync(p));
 
       if (sqlFile) {
+        // Check if users table already exists to avoid redundant execution
+        const checkTable = await pool.query(`SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users')`);
+        if (checkTable.rows[0].exists) {
+          console.log("Database schema already exists. Skipping initialization.");
+          return;
+        }
+
         const sqlContent = fs.readFileSync(sqlFile, "utf8");
         await pool.query(sqlContent);
         console.log("Database schema initialized successfully from one-shot SQL file.");
-      } else {
+      }
+      else {
         console.warn("Schema initialization skipped: schema.sql not found.");
       }
     } catch (err) {
