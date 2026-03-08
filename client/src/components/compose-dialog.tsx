@@ -208,7 +208,7 @@ export function ComposeDialog({ isOpen, onClose, onSend, onSaveDraft, onDiscardD
               <Sparkles className="w-4 h-4 text-primary animate-pulse" />
             </div>
             <span className="font-black text-[11px] uppercase tracking-[0.2em] text-foreground italic">
-              {replyTo ? "Intelligence Reply" : editDraft ? "Draft Recovery" : "PRO Command Center"}
+              {replyTo ? "Reply" : editDraft ? "Edit Draft" : "New Message"}
             </span>
           </div>
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

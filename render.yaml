@@ -1,8 +1,8 @@
 databases:
   - name: eomail-db
+    databaseName: eomail_db
+    user: eomail_db_user
     plan: free
-    databaseName: eomail
-    user: eomail
 
 services:
   - type: web

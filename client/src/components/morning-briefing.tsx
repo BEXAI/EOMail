@@ -125,8 +125,8 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
                 <Sparkles className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <span className="text-xs font-black tracking-[0.2em] text-primary uppercase">Chief of Staff Intelligence</span>
-                <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest mt-0.5 self-start">Neural Engine Active // OODA Loop V2.4</p>
+                <span className="text-xs font-black tracking-[0.2em] text-primary uppercase">AI Inbox Assistant</span>
+                <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest mt-0.5 self-start">Optimized Tools Running // System v2.4</p>
               </div>
               <Badge variant="outline" className="ml-auto text-[9px] font-black border-emerald-500/30 text-emerald-400 bg-emerald-500/5 px-2 py-0.5 rounded-md uppercase tracking-tighter">
                 Live Analysis
@@ -141,7 +141,7 @@ export function MorningBriefing({ userName, emails, onSelectEmail }: MorningBrie
             ) : (
               <div className="relative">
                 <p className="text-lg text-white/90 leading-relaxed font-semibold pr-4" data-testid="briefing-text">
-                  {briefingData?.briefing || "Deploy your AI agents to synthesize inbox intelligence and unlock high-level briefings."}
+                  {briefingData?.briefing || "Enable AI tools to analyze your inbox intelligence and generate smart briefings."}
                 </p>
                 <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-[#0a0a0f] to-transparent pointer-events-none" />
               </div>

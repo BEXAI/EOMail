@@ -248,7 +248,7 @@ function CustomFoldersSection({
         <CollapsibleTrigger className="flex items-center gap-1 px-3 mb-1 w-full group cursor-pointer">
           <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex-1 text-left">
-            Intelligence View
+            Smart Folders
           </span>
           <ChevronDown className="w-3 h-3 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
         </CollapsibleTrigger>
@@ -363,7 +363,7 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
           <div className="flex flex-col">
             <span className="font-black text-lg text-sidebar-foreground leading-none tracking-tighter uppercase italic">EOMail</span>
             <div className="flex items-center gap-1 mt-0.5">
-              <span className="text-[10px] font-bold text-primary tracking-widest uppercase opacity-70">Chief of Staff</span>
+              <span className="text-[10px] font-bold text-primary tracking-widest uppercase opacity-70">AI Optimized</span>
               <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]"></span>
             </div>
           </div>
