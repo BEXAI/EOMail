@@ -8,14 +8,6 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
-// Environment variable validation
-const REQUIRED_ENV = ["DATABASE_URL", "GEMINI_API_KEY", "OPENAI_API_KEY", "RESEND_API_KEY"];
-REQUIRED_ENV.forEach((key) => {
-  if (!process.env[key]) {
-    console.warn(`[EOMail] CRITICAL WARNING: Environment variable ${key} is missing.`);
-  }
-});
-
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

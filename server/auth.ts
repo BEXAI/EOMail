@@ -88,7 +88,7 @@ export function setupAuth(app: Express) {
       store: new PgSession({
         pool,
         tableName: "session",
-        createTableIfMissing: true,
+        createTableIfMissing: false,
       }),
       secret: process.env.SESSION_SECRET,
       resave: false,
@@ -155,8 +155,8 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
-      if (password.length < 4) {
-        return res.status(400).json({ message: "Password must be at least 4 characters" });
+      if (password.length < 12) {
+        return res.status(400).json({ message: "Password must be at least 12 characters" });
       }
 
       const existing = await storage.getUserByUsername(username);
@@ -261,7 +261,7 @@ export function setupAuth(app: Express) {
     try {
       const { token, password } = req.body;
       if (!token || !password) return res.status(400).json({ message: "Token and password are required" });
-      if (password.length < 4) return res.status(400).json({ message: "Password must be at least 4 characters" });
+      if (password.length < 12) return res.status(400).json({ message: "Password must be at least 12 characters" });
 
       const user = await storage.getUserByResetToken(token);
       if (!user || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {

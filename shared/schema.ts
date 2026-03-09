@@ -84,23 +84,6 @@ export const customFolders = pgTable("custom_folders", {
   index("custom_folders_parent_idx").on(table.parentId),
 ]);
 
-export const aiChatHistory = pgTable("ai_chat_history", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  emailId: varchar("email_id"),
-  role: text("role").notNull(),
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => [
-  index("ai_chat_history_user_idx").on(table.userId),
-  index("ai_chat_history_email_idx").on(table.emailId),
-  index("ai_chat_history_created_at_idx").on(table.createdAt),
-]);
-
-export const insertAiChatHistorySchema = createInsertSchema(aiChatHistory).omit({ id: true, createdAt: true });
-export type InsertAiChatHistory = z.infer<typeof insertAiChatHistorySchema>;
-export type AiChatHistory = typeof aiChatHistory.$inferSelect;
-
 export const insertCustomFolderSchema = createInsertSchema(customFolders).omit({ id: true, createdAt: true });
 export type InsertCustomFolder = z.infer<typeof insertCustomFolderSchema>;
 export type CustomFolder = typeof customFolders.$inferSelect;

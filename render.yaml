@@ -1,8 +1,15 @@
+databases:
+  - name: eomail-db
+    plan: free
+    databaseName: eomail
+    user: eomail
+
 services:
   - type: web
     name: eomail
     runtime: node
     plan: free
+    rootDir: EOMail-main
     buildCommand: npm ci --include=dev && npm run build && npm run db:push
     startCommand: npm run start
     envVars:
@@ -11,7 +18,9 @@ services:
       - key: PORT
         value: "10000"
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: eomail-db
+          property: connectionString
       - key: SESSION_SECRET
         generateValue: true
       - key: DOMAIN
@@ -19,8 +28,6 @@ services:
       - key: NEXT_PUBLIC_APP_URL
         value: https://eomail.co
       - key: OPENAI_API_KEY
-        sync: false
-      - key: GEMINI_API_KEY
         sync: false
       - key: RESEND_API_KEY
         sync: false
