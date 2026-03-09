@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import DOMPurify from "dompurify";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ function formatMessage(content: string): string {
     .replace(/^- (.+)$/gm, "<li class='ml-4 list-disc'>$1</li>")
     .replace(/^(\d+)\. (.+)$/gm, "<li class='ml-4 list-decimal'>$1. $2</li>")
     .replace(/\n/g, "<br/>");
-  return html;
+  return DOMPurify.sanitize(html);
 }
 
 export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiChatPanelProps) {

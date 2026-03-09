@@ -69,7 +69,8 @@ async function callOpenAI(options: ApiCallOptions): Promise<string> {
     { role: "user", content: options.userPrompt },
   ];
 
-  const { messages, totalRedactions } = sanitizeMessages(rawMessages, true);
+  const { messages: sanitized, totalRedactions } = sanitizeMessages(rawMessages, true);
+  const messages = sanitized as OpenAI.Chat.ChatCompletionMessageParam[];
   if (totalRedactions > 0) {
     console.log(`[Security] Redacted ${totalRedactions} PII item(s) before API call`);
   }
@@ -80,7 +81,7 @@ async function callOpenAI(options: ApiCallOptions): Promise<string> {
     try {
       const requestOptions: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
         model: options.model,
-        messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
+        messages,
         temperature: options.temperature,
         max_tokens: options.maxTokens,
       };
@@ -236,7 +237,7 @@ export async function executeMultiTurnChat(
       const response = await withTimeout(
         client.chat.completions.create({
           model: MODELS.complex,
-          messages,
+          messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
           max_tokens: maxTokens,
         }),
         RETRY_CONFIG.timeout_ms
