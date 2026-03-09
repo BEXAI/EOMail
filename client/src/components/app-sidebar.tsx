@@ -168,7 +168,7 @@ function ActiveAgentsSection({ isDemo }: { isDemo?: boolean }) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
-                        <span className={cn("font-medium truncate", agent.color)} style={{ fontSize: "10px" }}>
+                        <span className={cn("font-medium truncate text-xs", agent.color)}>
                           {activity.agentName || "EOMail Assistant"}
                         </span>
                         {activity.status === "complete" && (
@@ -178,7 +178,7 @@ function ActiveAgentsSection({ isDemo }: { isDemo?: boolean }) {
                           <X className="w-2.5 h-2.5 text-red-500 shrink-0" />
                         )}
                       </div>
-                      <span className="text-muted-foreground leading-tight truncate block" style={{ fontSize: "11px" }}>
+                      <span className="text-xs text-muted-foreground leading-tight truncate block mt-0.5">
                         {activity.action}
                       </span>
                     </div>

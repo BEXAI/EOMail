@@ -56,12 +56,12 @@
   --opaque-button-border-intensity: 15;
   --elevate-1: rgba(255, 255, 255, .05);
   --elevate-2: rgba(255, 255, 255, .1);
-  --background: 240 10% 2%;
-  /* Deeper base for better contrast with elements */
+  --background: 220 40% 4%;
+  /* Deeper navy base for better contrast with elements */
   --foreground: 0 0% 100%;
   --border: 240 5% 18%;
   /* Crisper borders */
-  --card: 240 6% 10%;
+  --card: 220 30% 6%;
   /* Slightly lighter card for separation */
   --card-foreground: 240 5% 98%;
   --card-border: 240 5% 20%;
@@ -77,21 +77,21 @@
   --popover: 240 10% 12%;
   --popover-foreground: 240 5% 98%;
   --popover-border: 240 5% 20%;
-  --primary: 250 100% 70%;
-  /* More vibrant core primary */
+  --primary: 210 100% 60%;
+  /* More vibrant electric blue core primary */
   --primary-foreground: 0 0% 0%;
   --secondary: 240 5% 15%;
   --secondary-foreground: 240 5% 95%;
-  --muted: 240 5% 15%;
-  --muted-foreground: 240 5% 75%;
-  /* Lighter muted text for better reading */
+  --muted: 220 20% 12%;
+  --muted-foreground: 220 20% 80%;
+  /* Brighter, cooler blue-gray text for better reading */
   --accent: 250 20% 15%;
   --accent-foreground: 250 100% 75%;
   --destructive: 0 90% 65%;
   --destructive-foreground: 0 0% 100%;
   --input: 240 5% 18%;
-  --ring: 250 100% 70%;
-  --chart-1: 250 100% 70%;
+  --ring: 210 100% 60%;
+  --chart-1: 210 100% 60%;
   --chart-2: 190 100% 60%;
   --chart-3: 160 100% 60%;
   --chart-4: 280 100% 75%;

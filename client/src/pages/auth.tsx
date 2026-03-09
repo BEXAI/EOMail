@@ -138,7 +138,7 @@ function LoginForm({ loginMutation }: { loginMutation: any }) {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div className="space-y-2">
-            <Label htmlFor="login-username" className="text-xs font-semibold tracking-wide text-muted-foreground">Username</Label>
+            <Label htmlFor="login-username" className="text-sm font-medium tracking-wide text-foreground/90">Username</Label>
             <Input
               id="login-username"
               name="username"
@@ -152,7 +152,7 @@ function LoginForm({ loginMutation }: { loginMutation: any }) {
             />
           </div>
           <div className="space-y-2 relative">
-            <Label htmlFor="login-password" className="text-xs font-semibold tracking-wide text-muted-foreground">Password</Label>
+            <Label htmlFor="login-password" className="text-sm font-medium tracking-wide text-foreground/90">Password</Label>
             <div className="relative">
               <Input
                 id="login-password"
@@ -257,7 +257,7 @@ function RegisterForm({ registerMutation }: { registerMutation: any }) {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div className="space-y-2">
-            <Label htmlFor="register-displayname" className="text-xs font-semibold tracking-wide text-muted-foreground">Full Name</Label>
+            <Label htmlFor="register-displayname" className="text-sm font-medium tracking-wide text-foreground/90">Full Name</Label>
             <Input
               id="register-displayname"
               name="name"
@@ -273,7 +273,7 @@ function RegisterForm({ registerMutation }: { registerMutation: any }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="register-username" className="text-xs font-semibold tracking-wide text-muted-foreground">Username</Label>
+            <Label htmlFor="register-username" className="text-sm font-medium tracking-wide text-foreground/90">Username</Label>
             <Input
               id="register-username"
               name="username"
@@ -288,7 +288,7 @@ function RegisterForm({ registerMutation }: { registerMutation: any }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="register-email" className="text-xs font-semibold tracking-wide text-muted-foreground">Email Address</Label>
+            <Label htmlFor="register-email" className="text-sm font-medium tracking-wide text-foreground/90">Email Address</Label>
             <Input
               id="register-email"
               type="email"
@@ -305,7 +305,7 @@ function RegisterForm({ registerMutation }: { registerMutation: any }) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2 relative">
-              <Label htmlFor="register-password" className="text-xs font-semibold tracking-wide text-muted-foreground">Password</Label>
+              <Label htmlFor="register-password" className="text-sm font-medium tracking-wide text-foreground/90">Password</Label>
               <Input
                 id="register-password"
                 type={showPassword ? "text" : "password"}
@@ -330,7 +330,7 @@ function RegisterForm({ registerMutation }: { registerMutation: any }) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="register-confirm" className="text-xs font-semibold tracking-wide text-muted-foreground">Confirm</Label>
+              <Label htmlFor="register-confirm" className="text-sm font-medium tracking-wide text-foreground/90">Confirm</Label>
               <Input
                 id="register-confirm"
                 type={showPassword ? "text" : "password"}
