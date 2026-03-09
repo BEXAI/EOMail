@@ -289,8 +289,8 @@ export function EmailList({
                 <div className="flex items-center justify-between gap-2 mb-0.5">
                   <span
                     className={cn(
-                      "text-sm truncate",
-                      !email.read ? "font-bold text-foreground" : "font-medium text-foreground/80"
+                      "truncate",
+                      !email.read ? "font-black text-foreground text-[15px]" : "font-medium text-foreground/80 text-sm"
                     )}
                     data-testid={`sender-${email.id}`}
                     dangerouslySetInnerHTML={{ __html: highlightText(email.from, search) }}
@@ -364,7 +364,7 @@ export function EmailList({
                 </div>
 
                 <div
-                  className={cn("text-sm truncate mb-0.5", !email.read ? "font-semibold text-foreground" : "text-foreground/70")}
+                  className={cn("truncate mb-0.5", !email.read ? "font-extrabold text-foreground text-[14px]" : "font-semibold text-foreground/70 text-sm")}
                   dangerouslySetInnerHTML={{ __html: highlightText(email.subject, search) }}
                   data-testid={`subject-${email.id}`}
                 />

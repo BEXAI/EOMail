@@ -14,6 +14,7 @@ const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
 const VerifyEmailPage = lazy(() => import("@/pages/verify-email"));
 const NotFound = lazy(() => import("@/pages/not-found"));
+const LandingPage = lazy(() => import("@/pages/landing"));
 
 function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
   const { user, isLoading } = useAuth();
@@ -55,7 +56,11 @@ function Router() {
         <Route path="/reset-password" component={ResetPasswordPage} />
         <Route path="/verify-email" component={VerifyEmailPage} />
         <Route path="/">
-          {() => <MailPage />}
+          {() => {
+            const { user, isLoading } = useAuth();
+            if (isLoading) return <LazyFallback />;
+            return user ? <MailPage /> : <LandingPage />;
+          }}
         </Route>
         <Route component={NotFound} />
       </Switch>

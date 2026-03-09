@@ -80,7 +80,7 @@ async function callOpenAI(options: ApiCallOptions): Promise<string> {
     try {
       const requestOptions: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
         model: options.model,
-        messages,
+        messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
         temperature: options.temperature,
         max_tokens: options.maxTokens,
       };

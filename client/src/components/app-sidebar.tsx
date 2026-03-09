@@ -523,7 +523,6 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
             <span className="text-sm font-medium text-sidebar-foreground truncate">{userName || "My Account"}</span>
             <span className="text-xs text-muted-foreground truncate">{mailboxAddress || userEmail || "me@eomail.co"}</span>
           </div>
-          <Settings className="w-4 h-4 text-muted-foreground shrink-0" />
         </div>
       </SidebarFooter>
     </Sidebar>

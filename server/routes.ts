@@ -637,12 +637,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
         }
 
+        const { id: _, ...emailData } = email as any;
         emailsToCreate.push({
-          ...email,
-          id: undefined, // let the db generate it
+          ...emailData,
           folder: customFolderKey,
           aiCategory: email.aiCategory || category,
-        });
+        } as InsertEmail);
 
         folderStats[folderName] = (folderStats[folderName] || 0) + 1;
       }
@@ -814,7 +814,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     preferred_signature: z.string().max(500).optional(),
     default_tone: z.enum(["professional", "casual", "formal", "assertive"]).optional(),
     industry_jargon_toggle: z.boolean().optional(),
-    formality_level: z.number().int().min(1).max(5).optional(),
+    formality_level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
   }).strict();
 
   app.post("/api/user/preferences", requireAuth, async (req, res) => {
