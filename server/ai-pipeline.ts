@@ -1,8 +1,12 @@
 import { storage } from "./storage";
-import { summarizeEmail, classifyEmail, draftReply, analyzeSpamRisk } from "./ai";
+import { summarizeEmail, classifyEmail, draftReply, analyzeSpamRisk, extractFinancialDocument, summarizeThread } from "./ai";
 import { emailContextIndex } from "./ai-context";
 import pLimit from "p-limit";
 import type { Email } from "@shared/schema";
+import { detectThread } from "./thread-service";
+import { performEnhancedThreatAnalysis, autoQuarantineEmail } from "./quarantine-service";
+import { processMeetingExtraction } from "./chrono-pipeline";
+import { compressThread, formatThreadForPrompt } from "./system-wrapper/context-manager";
 
 const MAX_BATCH_SIZE = 50;
 
@@ -93,6 +97,115 @@ export async function processEmail(emailId: string, userId: string, userDisplayN
       detail: detailParts.join(" — "),
     });
 
+    // ─── Phase 2: Extended Processing ──────────────────────────────────
+
+    // 1. Thread Detection — always run
+    try {
+      const threadInfo = detectThread(email);
+      await storage.updateEmail(emailId, userId, {
+        threadId: threadInfo.threadId,
+        threadSubject: threadInfo.threadSubject,
+      });
+    } catch (threadErr) {
+      console.error(`[Thread Detection] Failed for email ${emailId}:`, threadErr);
+    }
+
+    // 2. Enhanced Threat Analysis — if spam score >= 40
+    if (spamAnalysis.score >= 40) {
+      try {
+        const enhancedThreat = await performEnhancedThreatAnalysis(
+          email,
+          spamAnalysis.score,
+          spamAnalysis.reason,
+          spamAnalysis.threatType
+        );
+
+        if (enhancedThreat.shouldQuarantine) {
+          await autoQuarantineEmail(emailId, userId, enhancedThreat);
+          await storage.createAgentActivity({
+            userId,
+            agentName: "Aegis Gatekeeper",
+            action: `Auto-quarantined "${email.subject.slice(0, 35)}${email.subject.length > 35 ? "..." : ""}"`,
+            status: "complete",
+            emailId: email.id,
+            detail: `Threat score: ${enhancedThreat.combinedScore} — ${enhancedThreat.threatType}. ${enhancedThreat.detectedUrls.length} URL(s) analyzed.`,
+          });
+        }
+      } catch (threatErr) {
+        console.error(`[Enhanced Threat] Failed for email ${emailId}:`, threatErr);
+      }
+    }
+
+    // 3. FinOps Extraction — if category is "finance"
+    if (classification.category === "finance") {
+      try {
+        const finData = await extractFinancialDocument(
+          email.from,
+          email.fromEmail,
+          email.subject,
+          email.body
+        );
+
+        if (finData && finData.confidenceScore >= 30) {
+          const existing = await storage.getFinancialDocumentByEmail(emailId, userId);
+          if (!existing) {
+            await storage.createFinancialDocument({
+              userId,
+              emailId,
+              documentType: finData.documentType,
+              status: "extracted",
+              vendorName: finData.vendorName,
+              vendorEmail: finData.vendorEmail,
+              invoiceNumber: finData.invoiceNumber,
+              invoiceDate: finData.invoiceDate ? new Date(finData.invoiceDate) : null,
+              dueDate: finData.dueDate ? new Date(finData.dueDate) : null,
+              currency: finData.currency,
+              subtotal: finData.subtotal?.toString() ?? null,
+              tax: finData.tax?.toString() ?? null,
+              shipping: finData.shipping?.toString() ?? null,
+              discount: finData.discount?.toString() ?? null,
+              total: finData.total.toString(),
+              lineItems: finData.lineItems,
+              paymentStatus: finData.paymentStatus,
+              confidenceScore: finData.confidenceScore,
+              rawExtraction: finData,
+            });
+
+            await storage.createAgentActivity({
+              userId,
+              agentName: "FinOps Auto-Resolver",
+              action: `Extracted financial data from "${email.subject.slice(0, 35)}${email.subject.length > 35 ? "..." : ""}"`,
+              status: "complete",
+              emailId: email.id,
+              detail: `${finData.documentType}: ${finData.currency} ${finData.total} from ${finData.vendorName || "unknown vendor"} (${finData.confidenceScore}% confidence)`,
+            });
+          }
+        }
+      } catch (finErr) {
+        console.error(`[FinOps] Failed for email ${emailId}:`, finErr);
+      }
+    }
+
+    // 4. Chrono Meeting Extraction — if category is "scheduling"
+    if (classification.category === "scheduling") {
+      try {
+        const eventId = await processMeetingExtraction(email, userId);
+
+        if (eventId) {
+          await storage.createAgentActivity({
+            userId,
+            agentName: "Chrono-Logistics Coordinator",
+            action: `Extracted meeting from "${email.subject.slice(0, 35)}${email.subject.length > 35 ? "..." : ""}"`,
+            status: "complete",
+            emailId: email.id,
+            detail: `Calendar event created (${eventId})`,
+          });
+        }
+      } catch (chronoErr) {
+        console.error(`[Chrono] Failed for email ${emailId}:`, chronoErr);
+      }
+    }
+
     emailContextIndex.invalidate(userId);
 
     return updated || email;
@@ -123,4 +236,70 @@ export async function processAllUnprocessed(userId: string, userDisplayName: str
   );
 
   return results.filter((r) => r.status === "fulfilled").length;
+}
+
+/**
+ * Process thread digests for all threads with >= 2 messages
+ * that haven't been AI-processed yet.
+ */
+export async function processThreadDigests(userId: string): Promise<number> {
+  try {
+    const allEmails = await storage.getEmails(userId, "all", undefined, undefined, 200);
+    const threadMap = new Map<string, Email[]>();
+
+    for (const email of allEmails) {
+      if (!email.threadId) continue;
+      const existing = threadMap.get(email.threadId) || [];
+      existing.push(email);
+      threadMap.set(email.threadId, existing);
+    }
+
+    let processedCount = 0;
+    const limit = pLimit(2);
+
+    const tasks = Array.from(threadMap.entries())
+      .filter(([, emails]) => emails.length >= 2)
+      .map(([threadId, threadEmails]) =>
+        limit(async () => {
+          const existingThread = await storage.getThreadSummary(threadId, userId);
+          if (existingThread?.aiProcessed) return;
+
+          threadEmails.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+          const compressed = compressThread(threadEmails);
+          const threadContext = formatThreadForPrompt(compressed);
+          const participants = [...new Set(threadEmails.map((e) => e.from))].join(", ");
+          const threadSubject = threadEmails[0].threadSubject || threadEmails[0].subject;
+
+          const digest = await summarizeThread(threadContext, participants, threadEmails.length);
+
+          await storage.getOrCreateEmailThread(threadId, userId, {
+            id: threadId,
+            userId,
+            subject: threadSubject,
+            participants: [...new Set(threadEmails.flatMap((e) => [e.from, e.to]))],
+            messageCount: threadEmails.length,
+            firstMessageDate: threadEmails[0].timestamp,
+            lastMessageDate: threadEmails[threadEmails.length - 1].timestamp,
+            digest: digest.digest,
+            keyPoints: digest.keyPoints,
+            aiProcessed: true,
+          });
+
+          for (let i = 0; i < threadEmails.length; i++) {
+            await storage.updateEmail(threadEmails[i].id, userId, {
+              threadPosition: i + 1,
+            });
+          }
+
+          processedCount++;
+        })
+      );
+
+    await Promise.allSettled(tasks);
+    return processedCount;
+  } catch (error) {
+    console.error("[Thread Digests] Failed:", error);
+    return 0;
+  }
 }

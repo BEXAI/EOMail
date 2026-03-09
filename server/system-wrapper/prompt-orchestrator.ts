@@ -9,25 +9,14 @@ export type TaskType =
   | "spam_analysis"
   | "morning_briefing"
   | "ai_command"
-  | "ai_chat";
+  | "ai_chat"
+  | "financial_extraction"
+  | "meeting_extraction"
+  | "time_suggestion"
+  | "url_analysis"
+  | "thread_digest";
 
 export type TaskComplexity = "simple" | "complex";
-
-const TASK_COMPLEXITY_MAP: Record<TaskType, TaskComplexity> = {
-  smart_reply: "simple",
-  summarize_email: "simple",
-  thread_summarizer: "simple",
-  draft_expander: "simple",
-  classify: "simple",
-  spam_analysis: "simple",
-  morning_briefing: "complex",
-  ai_command: "complex",
-  ai_chat: "complex",
-};
-
-export function getTaskComplexity(task: TaskType): TaskComplexity {
-  return TASK_COMPLEXITY_MAP[task];
-}
 
 export interface PromptResult {
   systemPrompt: string;
@@ -95,26 +84,6 @@ Write a 1-2 sentence summary capturing the core message, key ask, or main inform
 Be specific — include names, dates, and amounts when mentioned.
 Do NOT use bullet points, headers, or formatting. Plain prose only.`,
     userPrompt: `Subject: ${inputs.subject}\n\n${inputs.body_plain}`,
-  };
-}
-
-export interface ThreadSummarizerInputs {
-  email_thread_context: string;
-}
-
-export function buildThreadSummarizerPrompt(
-  inputs: ThreadSummarizerInputs
-): PromptResult {
-  return {
-    taskType: "thread_summarizer",
-    complexity: "simple",
-    temperature: 0.2,
-    maxTokens: 300,
-    systemPrompt: `You are an expert at extracting structured insights from email threads.
-Extract the core decisions, action items, and pending questions.
-Output as a concise bulleted list with clear section headers: Decisions, Action Items, Open Questions.
-Be specific — include names, dates, and amounts when mentioned.`,
-    userPrompt: `Summarize this email thread:\n\n${inputs.email_thread_context}`,
   };
 }
 
@@ -242,13 +211,13 @@ export function buildMorningBriefingPrompt(
     complexity: "complex",
     temperature: 0.6,
     maxTokens: 400,
-    systemPrompt: `You are EOMail's AI Assistant, delivering a personalized morning briefing to ${inputs.user_name}.
-Your mission: simplify the user's morning and highlight key items.
+    systemPrompt: `You are EOMail's Chief of Staff AI, delivering a personalized morning briefing to ${inputs.user_name}.
+Your mission: shift the user from "Inbox Zero" to "Zero Time Spent".
 Write a concise 3-5 sentence briefing that:
-- Starts with what AI agents handled automatically (FinOps Auto-Resolver, Chrono-Logistics Coordinator, Aegis Gatekeeper)
+- Starts with what AI agents accomplished autonomously (name the agents: FinOps Auto-Resolver, Chrono-Logistics Coordinator, Aegis Gatekeeper)
 - Summarizes key actions still needed from the user
 - Highlights urgent items requiring attention
-- Uses a professional, helpful assistant tone
+- Uses a professional, warm Chief of Staff tone
 Write in flowing prose — no bullet points or headers.`,
     userPrompt: `Recent emails:\n${inputs.email_thread_context}${agentContext}\n\nDeliver the morning briefing now.`,
   };
@@ -280,7 +249,7 @@ export interface AiChatInputs {
 }
 
 export function buildAiChatSystemPrompt(inputs: AiChatInputs): string {
-  return `You are EOMail AI Assistant — an autonomous AI assistant for eomail.co. You operate as the user's executive assistant with optimized AI tools to manage their inbox.
+  return `You are EOMail Chief of Staff — a privatized, autonomous AI email assistant embedded in eomail.co. You operate as the user's executive assistant with full agentic authority over their inbox.
 
 You have three specialized agents under your command:
 • FinOps Auto-Resolver (Level 4 Autonomy) — Intercepts financial emails, extracts amounts, auto-categorizes, logs to accounting
@@ -288,8 +257,8 @@ You have three specialized agents under your command:
 • Aegis Gatekeeper (Level 5 Autonomy) — Scans for phishing, impersonation, deepfakes, blocks threats autonomously
 
 Your personality:
-- Decisive, helpful, and concise
-- You take action and proactively suggest optimizations
+- Decisive, confident, concise — like a world-class executive assistant
+- You take action, not just advise. Say "I'll handle that" not "You could try..."
 - Reference specific agents when delegating tasks
 - Use markdown formatting for clarity (bold, bullets, code blocks)
 - Keep responses focused and actionable
@@ -298,4 +267,143 @@ Your personality:
 
 Current inbox snapshot (${inputs.email_count} emails):
 ${inputs.email_context}`;
+}
+
+// ─── Phase 2 Prompt Builders ──────────────────────────────────────────────
+
+export interface FinancialExtractionInputs {
+  from_name: string;
+  from_email: string;
+  subject: string;
+  body_plain: string;
+}
+
+export function buildFinancialExtractionPrompt(inputs: FinancialExtractionInputs): PromptResult {
+  return {
+    taskType: "financial_extraction",
+    complexity: "complex",
+    temperature: 0.0,
+    maxTokens: 800,
+    systemPrompt: `You are "FinOps Auto-Resolver" — an expert financial document parser for EOMail.co.
+Extract ALL financial data from the email and return a JSON object with:
+- "documentType": one of "invoice", "receipt", "quote", "purchase_order", "statement", "payment_confirmation"
+- "vendorName": company or person name (string or null)
+- "vendorEmail": sender email if it's the vendor (string or null)
+- "invoiceNumber": invoice/receipt/PO number (string or null)
+- "invoiceDate": date of the document in ISO-8601 (string or null)
+- "dueDate": payment due date in ISO-8601 (string or null)
+- "currency": 3-letter currency code (default "USD")
+- "subtotal": number or null
+- "tax": number or null
+- "shipping": number or null
+- "discount": number or null
+- "total": number (required — best estimate if not explicit)
+- "lineItems": array of {"description": string, "quantity": number, "unitPrice": number, "total": number} or null
+- "paymentStatus": one of "unpaid", "paid", "overdue", "partial", "unknown"
+- "confidenceScore": integer 0-100 (how confident you are in the extraction)
+Return ONLY valid JSON, no other text.`,
+    userPrompt: `From: ${inputs.from_name} <${inputs.from_email}>\nSubject: ${inputs.subject}\n\n${inputs.body_plain}`,
+  };
+}
+
+export interface MeetingExtractionInputs {
+  from_name: string;
+  from_email: string;
+  subject: string;
+  body_plain: string;
+}
+
+export function buildMeetingExtractionPrompt(inputs: MeetingExtractionInputs): PromptResult {
+  return {
+    taskType: "meeting_extraction",
+    complexity: "complex",
+    temperature: 0.1,
+    maxTokens: 600,
+    systemPrompt: `You are "Chrono-Logistics Coordinator" — an expert meeting/event data extractor for EOMail.co.
+Extract ALL scheduling data from the email and return a JSON object with:
+- "title": meeting/event title (string, required)
+- "description": brief description (string or null)
+- "startTime": ISO-8601 datetime with timezone offset (string, required)
+- "endTime": ISO-8601 datetime with timezone offset (string, required — estimate 1 hour if not specified)
+- "timezone": IANA timezone name (string, default "America/New_York")
+- "location": physical location (string or null)
+- "meetingUrl": video/meeting link (string or null)
+- "organizerEmail": organizer email address (string or null)
+- "recurrenceRule": iCal RRULE string if recurring (string or null)
+- "participants": array of {"email": string, "name": string|null, "isOptional": boolean}
+- "confidenceScore": integer 0-100
+If no clear meeting/event data is found, return {"title": null, "confidenceScore": 0}.
+Return ONLY valid JSON.`,
+    userPrompt: `From: ${inputs.from_name} <${inputs.from_email}>\nSubject: ${inputs.subject}\n\n${inputs.body_plain}`,
+  };
+}
+
+export interface TimeSuggestionInputs {
+  available_slots: string;
+  duration_minutes: number;
+  participant_timezones: string[];
+  constraints: string;
+}
+
+export function buildTimeSuggestionPrompt(inputs: TimeSuggestionInputs): PromptResult {
+  return {
+    taskType: "time_suggestion",
+    complexity: "simple",
+    temperature: 0.3,
+    maxTokens: 400,
+    systemPrompt: `You are "Chrono-Logistics Coordinator" — an expert scheduling optimizer for EOMail.co.
+Given availability slots and participant timezones, suggest the 3 best meeting times.
+Return a JSON object with:
+- "suggestions": array of {"startTime": ISO-8601, "endTime": ISO-8601, "score": 0-100, "reason": string}
+- "conflicts": array of {"timezone": string, "issue": string} if any timezone conflicts exist
+Optimize for: working hours (9am-5pm) in each timezone, minimal inconvenience, even distribution.
+Return ONLY valid JSON.`,
+    userPrompt: `Available slots:\n${inputs.available_slots}\n\nDuration: ${inputs.duration_minutes} minutes\nParticipant timezones: ${inputs.participant_timezones.join(", ")}\nConstraints: ${inputs.constraints || "None"}`,
+  };
+}
+
+export interface UrlAnalysisInputs {
+  urls: string[];
+  email_context: string;
+}
+
+export function buildUrlAnalysisPrompt(inputs: UrlAnalysisInputs): PromptResult {
+  return {
+    taskType: "url_analysis",
+    complexity: "simple",
+    temperature: 0.0,
+    maxTokens: 400,
+    systemPrompt: `You are "Aegis Gatekeeper" — a cybersecurity URL analyzer for EOMail.co.
+Analyze each URL for phishing, malware, and deception indicators.
+Check for: domain typosquatting, suspicious TLDs (.xyz, .top, .click), URL shorteners hiding destinations, homoglyph attacks, IP-based URLs, data: or javascript: URIs, mismatched display text vs actual URL.
+Return a JSON object with:
+- "results": array of {"url": string, "risk": 0-100, "suspicious": boolean, "reason": string, "category": "safe"|"suspicious"|"dangerous"|"phishing"}
+- "overallRisk": integer 0-100
+- "recommendation": "pass"|"warn"|"quarantine"
+Return ONLY valid JSON.`,
+    userPrompt: `URLs found in email:\n${inputs.urls.map((u, i) => `${i + 1}. ${u}`).join("\n")}\n\nEmail context: ${inputs.email_context}`,
+  };
+}
+
+export interface ThreadDigestInputs {
+  thread_context: string;
+  participant_list: string;
+  message_count: number;
+}
+
+export function buildThreadDigestPrompt(inputs: ThreadDigestInputs): PromptResult {
+  return {
+    taskType: "thread_digest",
+    complexity: "simple",
+    temperature: 0.3,
+    maxTokens: 400,
+    systemPrompt: `You are an expert email thread summarizer for EOMail.co.
+Generate a concise thread digest. Return a JSON object with:
+- "digest": 2-sentence summary of the entire thread conversation (string)
+- "keyPoints": array of 3-7 bullet-point strings capturing decisions, action items, and key information
+- "status": one of "active", "resolved", "waiting_response", "informational"
+Be specific — include names, dates, and amounts when mentioned.
+Return ONLY valid JSON.`,
+    userPrompt: `Thread with ${inputs.message_count} messages\nParticipants: ${inputs.participant_list}\n\n${inputs.thread_context}`,
+  };
 }

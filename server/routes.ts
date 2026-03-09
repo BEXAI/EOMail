@@ -6,8 +6,8 @@ import { z } from "zod";
 import { storage } from "./storage";
 import { insertEmailSchema, type InsertEmail } from "@shared/schema";
 import { requireAuth } from "./auth";
-import { processEmail, processAllUnprocessed } from "./ai-pipeline";
-import { draftReply, generateBriefing, handleAiCommand, handleAiChat, classifyEmail, expandDraft, type ChatMessage } from "./ai";
+import { processEmail, processAllUnprocessed, processThreadDigests } from "./ai-pipeline";
+import { draftReply, generateBriefing, handleAiCommand, handleAiChat, classifyEmail, expandDraft, suggestOptimalTime, type ChatMessage } from "./ai";
 import { sendEmail } from "./email";
 import { getCache, setCache, invalidateCache } from "./cache";
 import { emailContextIndex } from "./ai-context";
@@ -213,8 +213,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = req.user!.id;
       const userDisplayName = req.user!.displayName;
       const count = await processAllUnprocessed(userId, userDisplayName);
+      const threadCount = await processThreadDigests(userId);
       invalidateCache(`briefing:${userId}`);
-      res.json({ processed: count });
+      res.json({ processed: count, threadsDigested: threadCount });
     } catch (e) {
       console.error("AI process-all error:", e);
       res.status(500).json({ error: "Failed to process emails with AI" });
@@ -709,6 +710,205 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: "Failed to update preferences" });
+    }
+  });
+
+  // ─── Phase 2 Routes ─────────────────────────────────────────────────────
+
+  // Financial documents
+  app.get("/api/finance/documents", requireAuth, async (req, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const docs = await storage.getFinancialDocuments(req.user!.id, { status });
+      res.json(docs);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch financial documents" });
+    }
+  });
+
+  app.get("/api/finance/documents/:id", requireAuth, async (req, res) => {
+    try {
+      const doc = await storage.getFinancialDocument(req.params.id, req.user!.id);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+      res.json(doc);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch document" });
+    }
+  });
+
+  app.patch("/api/finance/documents/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateFinancialDocument(req.params.id, req.user!.id, req.body);
+      if (!updated) return res.status(404).json({ error: "Document not found" });
+      res.json(updated);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to update document" });
+    }
+  });
+
+  // Calendar events
+  app.get("/api/calendar/events", requireAuth, async (req, res) => {
+    try {
+      const start = req.query.start ? new Date(req.query.start as string) : undefined;
+      const end = req.query.end ? new Date(req.query.end as string) : undefined;
+      const events = await storage.getCalendarEvents(req.user!.id, start, end);
+      res.json(events);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch calendar events" });
+    }
+  });
+
+  app.get("/api/calendar/events/:id", requireAuth, async (req, res) => {
+    try {
+      const event = await storage.getCalendarEvent(req.params.id, req.user!.id);
+      if (!event) return res.status(404).json({ error: "Event not found" });
+      const participants = await storage.getCalendarParticipants(event.id);
+      res.json({ ...event, participants });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch event" });
+    }
+  });
+
+  app.delete("/api/calendar/events/:id", requireAuth, async (req, res) => {
+    try {
+      const deleted = await storage.deleteCalendarEvent(req.params.id, req.user!.id);
+      if (!deleted) return res.status(404).json({ error: "Event not found" });
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to delete event" });
+    }
+  });
+
+  // Availability slots
+  app.get("/api/calendar/availability", requireAuth, async (req, res) => {
+    try {
+      const slots = await storage.getAvailabilitySlots(req.user!.id);
+      res.json(slots);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch availability" });
+    }
+  });
+
+  app.put("/api/calendar/availability", requireAuth, async (req, res) => {
+    try {
+      const { slots } = req.body;
+      if (!Array.isArray(slots)) return res.status(400).json({ error: "slots array required" });
+      const userId = req.user!.id;
+      const typedSlots = slots.map((s: { dayOfWeek: number; startTime: string; endTime: string; timezone?: string; isAvailable?: boolean; priority?: number }) => ({
+        userId,
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        timezone: s.timezone || "America/New_York",
+        isAvailable: s.isAvailable ?? true,
+        priority: s.priority,
+      }));
+      const savedSlots = await storage.setAvailabilitySlots(userId, typedSlots);
+      res.json(savedSlots);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to save availability" });
+    }
+  });
+
+  // Timezone conflicts
+  app.get("/api/calendar/conflicts", requireAuth, async (req, res) => {
+    try {
+      const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
+      const conflicts = await storage.getTimezoneConflicts(req.user!.id, resolved);
+      res.json(conflicts);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch conflicts" });
+    }
+  });
+
+  app.patch("/api/calendar/conflicts/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateTimezoneConflict(req.params.id, req.user!.id, req.body);
+      if (!updated) return res.status(404).json({ error: "Conflict not found" });
+      res.json(updated);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to update conflict" });
+    }
+  });
+
+  // AI time suggestion
+  app.post("/api/ai/suggest-time", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { durationMinutes, participantTimezones, constraints } = req.body;
+      const slots = await storage.getAvailabilitySlots(userId);
+      const slotsStr = slots.map((s) =>
+        `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][s.dayOfWeek]} ${s.startTime}-${s.endTime} (${s.timezone})`
+      ).join("\n");
+
+      const result = await suggestOptimalTime(
+        slotsStr || "Mon-Fri 09:00-17:00 (America/New_York)",
+        durationMinutes || 60,
+        participantTimezones || [],
+        constraints
+      );
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to suggest time" });
+    }
+  });
+
+  // Thread digests
+  app.post("/api/ai/process-threads", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const count = await processThreadDigests(req.user!.id);
+      res.json({ processed: count });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to process thread digests" });
+    }
+  });
+
+  app.get("/api/threads/:threadId", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const threadEmails = await storage.getEmailThread(req.params.threadId, userId);
+      const summary = await storage.getThreadSummary(req.params.threadId, userId);
+      res.json({ emails: threadEmails, summary });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch thread" });
+    }
+  });
+
+  // Quarantine / Security
+  app.get("/api/security/quarantine", requireAuth, async (req, res) => {
+    try {
+      const actions = await storage.getQuarantineActions(req.user!.id);
+      res.json(actions);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch quarantine actions" });
+    }
+  });
+
+  app.post("/api/security/quarantine/:emailId/release", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { emailId } = req.params;
+      const action = await storage.getQuarantineAction(emailId, userId);
+      if (!action) return res.status(404).json({ error: "Quarantine record not found" });
+
+      await storage.updateQuarantineAction(action.id, userId, {
+        releaseStatus: "released",
+        reviewedAt: new Date(),
+      });
+      await storage.updateEmail(emailId, userId, { folder: "inbox" });
+      emailContextIndex.invalidate(userId);
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to release email" });
+    }
+  });
+
+  app.get("/api/security/scan-logs/:emailId", requireAuth, async (req, res) => {
+    try {
+      const logs = await storage.getThreatScanLogs(req.params.emailId);
+      res.json(logs);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch scan logs" });
     }
   });
 
