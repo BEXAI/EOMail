@@ -1,10 +1,14 @@
 import type { Express } from "express";
+
 import { type Server } from "http";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { storage } from "./storage";
-import { insertEmailSchema, type InsertEmail } from "@shared/schema";
+import { eq, or, and, desc, sql, ilike } from "drizzle-orm";
+import * as bcrypt from "bcrypt";
+import { db } from "./db";
+import { insertEmailSchema, type InsertEmail, users, emails } from "@shared/schema";
 import { requireAuth } from "./auth";
 import { processEmail, processAllUnprocessed } from "./ai-pipeline";
 import { draftReply, generateBriefing, handleAiCommand, handleAiChat, classifyEmail, expandDraft, type ChatMessage } from "./ai";
@@ -135,7 +139,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const email = await storage.createEmail(parsed.data);
       emailContextIndex.invalidate(userId);
-      invalidateCache(`briefing:${userId}`);
+      invalidateCache(`briefing:${userId} `);
       res.status(201).json(email);
     } catch (e) {
       res.status(500).json({ error: "Failed to create email" });
@@ -150,7 +154,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const updated = await storage.updateEmail(req.params.id, userId, parsed.data);
       if (!updated) return res.status(404).json({ error: "Email not found" });
       emailContextIndex.invalidate(userId);
-      invalidateCache(`briefing:${userId}`);
+      invalidateCache(`briefing:${userId} `);
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: "Failed to update email" });
@@ -166,13 +170,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (action === "delete") {
         const count = await storage.deleteEmails(ids, userId);
         emailContextIndex.invalidate(userId);
-        invalidateCache(`briefing:${userId}`);
+        invalidateCache(`briefing:${userId} `);
         return res.json({ deleted: count });
       }
       if (action === "update" && updates) {
         const results = await storage.updateEmails(ids.map(id => ({ id, values: updates })), userId);
         emailContextIndex.invalidate(userId);
-        invalidateCache(`briefing:${userId}`);
+        invalidateCache(`briefing:${userId} `);
         return res.json(results);
       }
       res.status(400).json({ error: "Invalid action" });
@@ -187,7 +191,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const deleted = await storage.deleteEmail(req.params.id, userId);
       if (!deleted) return res.status(404).json({ error: "Email not found" });
       emailContextIndex.invalidate(userId);
-      invalidateCache(`briefing:${userId}`);
+      invalidateCache(`briefing:${userId} `);
       res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: "Failed to delete email" });
@@ -200,11 +204,123 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userDisplayName = req.user!.displayName;
       const result = await processEmail(req.params.id, userId, userDisplayName);
       if (!result) return res.status(404).json({ error: "Email not found" });
-      invalidateCache(`briefing:${userId}`);
+      invalidateCache(`briefing:${userId} `);
       res.json(result);
     } catch (e) {
       console.error("AI process error:", e);
       res.status(500).json({ error: "Failed to process email with AI" });
+    }
+  });
+
+  app.get("/api/emails/unread-count", requireAuth, async (req, res) => {
+    try {
+      const [result] = await db
+        .select({ count: sql<number>`cast(count(*) as integer)` })
+        .from(emails)
+        .where(and(
+          eq(emails.userId, req.user!.id),
+          eq(emails.read, false),
+          eq(emails.folder, "inbox")
+        ));
+
+      res.json({ count: result.count || 0 });
+    } catch (error) {
+      console.error("[Unread Count Error]", error);
+      res.status(500).json({ error: "Failed to count unread emails" });
+    }
+  });
+
+  // TEMPORARY SEED ENDPOINT FOR UX SCREENSHOTS
+  app.post("/api/seed-ux", async (req, res) => {
+    try {
+      let user = await db.select().from(users).where(eq(users.username, 'demo_user')).limit(1);
+      let userId;
+      if (user.length === 0) {
+        const hashedPassword = await bcrypt.hash("DemoPassword123!", 10);
+        const [newUser] = await db.insert(users).values({
+          username: "demo_user",
+          email: "demo@eomail.co",
+          password: hashedPassword,
+          displayName: "Demo User",
+          avatarInitials: "DU",
+        }).returning();
+        userId = newUser.id;
+      } else {
+        userId = user[0].id;
+      }
+
+      await db.delete(emails).where(eq(emails.userId, userId));
+      await db.insert(emails).values([
+        {
+          userId,
+          from: "Stripe",
+          fromEmail: "receipts@stripe.com",
+          to: "demo@eomail.co",
+          toEmail: "demo@eomail.co",
+          subject: "Your receipt from EOMail Pro - $29.00",
+          body: "<p>Thank you for your payment. Amount: $29.00. Invoice appended.</p>",
+          preview: "Thank you for your payment. Amount: $29.00. Invoice appended.",
+          timestamp: new Date(),
+          read: false,
+          folder: "inbox",
+          aiCategory: "finance",
+          aiProcessed: true,
+          aiSummary: "Receipt for EOMail Pro subscription: $29.00",
+        },
+        {
+          userId,
+          from: "Priya Patel",
+          fromEmail: "priya@example.com",
+          to: "demo@eomail.co",
+          toEmail: "demo@eomail.co",
+          subject: "Coffee chat next week?",
+          body: "<p>Hey! I came across your work and I'd love to grab a coffee next Tuesday at 2 PM PST to discuss some potential synergies. Let me know if that works!</p>",
+          preview: "Hey! I came across your work and I'd love to grab a coffee next Tuesday at 2 PM PST...",
+          timestamp: new Date(Date.now() - 3600000),
+          read: false,
+          folder: "inbox",
+          aiCategory: "scheduling",
+          aiProcessed: true,
+          aiSummary: "Priya Patel requested a 2 PM PST meeting next Tuesday.",
+        },
+        {
+          userId,
+          from: "PayPal Support",
+          fromEmail: "security-alert-urgent@paypal-verify-account.com",
+          to: "demo@eomail.co",
+          toEmail: "demo@eomail.co",
+          subject: "URGENT: Your account has been suspended",
+          body: "<p>Dear User, please click here immediately to verify your identity or your account will be permanently closed.</p>",
+          preview: "Dear User, please click here immediately to verify your identity...",
+          timestamp: new Date(Date.now() - 7200000),
+          read: false,
+          folder: "inbox",
+          aiCategory: "action-required",
+          aiProcessed: true,
+          aiSpamScore: 98,
+          aiSpamReason: "Suspicious sender domain mimicking PayPal.",
+        },
+        {
+          userId,
+          from: "Netflix",
+          fromEmail: "info@mailer.netflix.com",
+          to: "demo@eomail.co",
+          toEmail: "demo@eomail.co",
+          subject: "New on Netflix: Shows you'll love this October",
+          body: "<p>Based on your watching history, here are our top picks.</p>",
+          preview: "Based on your watching history, here are our top picks...",
+          timestamp: new Date(Date.now() - 86400000),
+          read: true,
+          folder: "inbox",
+          aiCategory: "newsletter",
+          aiProcessed: true,
+          aiSummary: "Netflix's monthly recommendations for October.",
+        }
+      ]);
+      res.json({ success: true, message: "DB seeded" });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Seed failed" });
     }
   });
 
@@ -213,7 +329,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = req.user!.id;
       const userDisplayName = req.user!.displayName;
       const count = await processAllUnprocessed(userId, userDisplayName);
-      invalidateCache(`briefing:${userId}`);
+      invalidateCache(`briefing:${userId} `);
       res.json({ processed: count });
     } catch (e) {
       console.error("AI process-all error:", e);
@@ -229,7 +345,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const tone = req.body?.tone as string | undefined;
       const draft = await draftReply(email, req.user!.displayName, tone, userId);
       const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: draft });
-      invalidateCache(`briefing:${userId}`);
+      invalidateCache(`briefing:${userId} `);
       res.json(updated);
     } catch (e) {
       console.error("AI draft-reply error:", e);
@@ -240,7 +356,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/ai/briefing", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
-      const cacheKey = `briefing:${userId}`;
+      const cacheKey = `briefing:${userId} `;
       const cached = getCache<{ briefing: string, agentStats: any[] }>(cacheKey);
       if (cached) {
         return res.json(cached);
@@ -340,7 +456,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!email.aiDraftReply) return res.status(400).json({ error: "No draft reply to approve" });
 
       const now = new Date();
-      const replyBody = `<p>${email.aiDraftReply.replace(/\n/g, "</p><p>")}</p>`;
+      const replyBody = `< p > ${email.aiDraftReply.replace(/\n/g, "</p><p>")} </p>`;
       const replySubject = `Re: ${email.subject}`;
 
       const senderMailbox = (req.user as any).mailboxAddress || req.user!.email;
@@ -530,7 +646,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
         folderStats[folderName] = (folderStats[folderName] || 0) + 1;
       }
-      
+
       if (emailsToCreate.length > 0) {
         await storage.createEmails(emailsToCreate);
       }
