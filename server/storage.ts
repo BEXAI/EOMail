@@ -1,8 +1,25 @@
-import { type User, type InsertUser, type Email, type InsertEmail, type AgentActivity, type InsertAgentActivity, type CustomFolder, type InsertCustomFolder, users, emails, agentActivity, customFolders } from "@shared/schema";
+import {
+  type User, type InsertUser,
+  type Email, type InsertEmail,
+  type AgentActivity, type InsertAgentActivity,
+  type CustomFolder, type InsertCustomFolder,
+  type FinancialDocument, type InsertFinancialDocument,
+  type CalendarEvent, type InsertCalendarEvent,
+  type CalendarParticipant, type InsertCalendarParticipant,
+  type TimezoneConflict, type InsertTimezoneConflict,
+  type AvailabilitySlot, type InsertAvailabilitySlot,
+  type QuarantineAction, type InsertQuarantineAction,
+  type ThreatScanLog, type InsertThreatScanLog,
+  type EmailThread, type InsertEmailThread,
+  users, emails, agentActivity, customFolders,
+  financialDocuments, calendarEvents, calendarParticipants,
+  timezoneConflicts, availabilitySlots, quarantineActions,
+  threatScanLogs, emailThreads,
+} from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, ilike, desc, inArray, ne, not, like, sql, isNotNull } from "drizzle-orm";
+import { eq, and, or, ilike, desc, asc, inArray, ne, not, like, sql, isNotNull } from "drizzle-orm";
 
-type EmailUpdates = Partial<Pick<Email, "read" | "starred" | "folder" | "labels" | "to" | "toEmail" | "cc" | "bcc" | "subject" | "body" | "preview" | "aiSummary" | "aiCategory" | "aiUrgency" | "aiSuggestedAction" | "aiDraftReply" | "aiSpamScore" | "aiSpamReason" | "aiProcessed">>;
+type EmailUpdates = Partial<Pick<Email, "read" | "starred" | "folder" | "labels" | "to" | "toEmail" | "cc" | "bcc" | "subject" | "body" | "preview" | "aiSummary" | "aiCategory" | "aiUrgency" | "aiSuggestedAction" | "aiDraftReply" | "aiSpamScore" | "aiSpamReason" | "aiProcessed" | "threadId" | "threadSubject" | "threadPosition">>;
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -37,6 +54,41 @@ export interface IStorage {
   getCustomFolderByName(userId: string, name: string, parentId?: string | null): Promise<CustomFolder | undefined>;
   createCustomFolder(data: InsertCustomFolder): Promise<CustomFolder>;
   deleteCustomFolder(id: string, userId: string): Promise<boolean>;
+
+  // FinOps
+  getFinancialDocuments(userId: string, filters?: { status?: string; emailId?: string }): Promise<FinancialDocument[]>;
+  getFinancialDocument(id: string, userId: string): Promise<FinancialDocument | undefined>;
+  getFinancialDocumentByEmail(emailId: string, userId: string): Promise<FinancialDocument | undefined>;
+  createFinancialDocument(data: InsertFinancialDocument): Promise<FinancialDocument>;
+  updateFinancialDocument(id: string, userId: string, updates: Partial<FinancialDocument>): Promise<FinancialDocument | undefined>;
+
+  // Calendar
+  getCalendarEvents(userId: string, start?: Date, end?: Date): Promise<CalendarEvent[]>;
+  getCalendarEvent(id: string, userId: string): Promise<CalendarEvent | undefined>;
+  createCalendarEvent(data: InsertCalendarEvent): Promise<CalendarEvent>;
+  updateCalendarEvent(id: string, userId: string, updates: Partial<CalendarEvent>): Promise<CalendarEvent | undefined>;
+  deleteCalendarEvent(id: string, userId: string): Promise<boolean>;
+  getCalendarParticipants(eventId: string): Promise<CalendarParticipant[]>;
+  createCalendarParticipant(data: InsertCalendarParticipant): Promise<CalendarParticipant>;
+  getTimezoneConflicts(userId: string, resolved?: boolean): Promise<TimezoneConflict[]>;
+  createTimezoneConflict(data: InsertTimezoneConflict): Promise<TimezoneConflict>;
+  updateTimezoneConflict(id: string, userId: string, updates: Partial<TimezoneConflict>): Promise<TimezoneConflict | undefined>;
+  getAvailabilitySlots(userId: string): Promise<AvailabilitySlot[]>;
+  setAvailabilitySlots(userId: string, slots: InsertAvailabilitySlot[]): Promise<AvailabilitySlot[]>;
+
+  // Quarantine
+  getQuarantineActions(userId: string): Promise<QuarantineAction[]>;
+  getQuarantineAction(emailId: string, userId: string): Promise<QuarantineAction | undefined>;
+  createQuarantineAction(data: InsertQuarantineAction): Promise<QuarantineAction>;
+  updateQuarantineAction(id: string, userId: string, updates: Partial<QuarantineAction>): Promise<QuarantineAction | undefined>;
+  getThreatScanLogs(emailId: string): Promise<ThreatScanLog[]>;
+  createThreatScanLog(data: InsertThreatScanLog): Promise<ThreatScanLog>;
+
+  // Threads
+  getEmailThread(threadId: string, userId: string): Promise<Email[]>;
+  getOrCreateEmailThread(threadId: string, userId: string, data: InsertEmailThread): Promise<EmailThread>;
+  getThreadSummary(threadId: string, userId: string): Promise<EmailThread | undefined>;
+  updateThreadSummary(threadId: string, userId: string, updates: Partial<EmailThread>): Promise<EmailThread | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -208,6 +260,7 @@ export class DatabaseStorage implements IStorage {
         trash: sql<number>`count(*) filter (where folder = 'trash')`.as("trash"),
         all: sql<number>`count(*) filter (where folder != 'trash' and folder != 'spam' and folder != 'archive' and not folder like 'custom:%')`.as("all"),
         "pending-approvals": sql<number>`count(*) filter (where ${emails.aiDraftReply} IS NOT NULL and folder != 'sent' and folder != 'trash')`.as("pending-approvals"),
+        quarantine: sql<number>`count(*) filter (where folder = 'quarantine')`.as("quarantine"),
       })
       .from(emails)
       .where(eq(emails.userId, userId));
@@ -330,6 +383,181 @@ export class DatabaseStorage implements IStorage {
   async createEmails(emailsToInsert: InsertEmail[]): Promise<Email[]> {
     if (emailsToInsert.length === 0) return [];
     return db.insert(emails).values(emailsToInsert).returning();
+  }
+
+  // ─── FinOps ─────────────────────────────────────────────────────────────────
+
+  async getFinancialDocuments(userId: string, filters?: { status?: string; emailId?: string }): Promise<FinancialDocument[]> {
+    const conditions = [eq(financialDocuments.userId, userId)];
+    if (filters?.status) conditions.push(eq(financialDocuments.status, filters.status));
+    if (filters?.emailId) conditions.push(eq(financialDocuments.emailId, filters.emailId));
+    return db.select().from(financialDocuments).where(and(...conditions)).orderBy(desc(financialDocuments.createdAt));
+  }
+
+  async getFinancialDocument(id: string, userId: string): Promise<FinancialDocument | undefined> {
+    const [doc] = await db.select().from(financialDocuments)
+      .where(and(eq(financialDocuments.id, id), eq(financialDocuments.userId, userId))).limit(1);
+    return doc;
+  }
+
+  async getFinancialDocumentByEmail(emailId: string, userId: string): Promise<FinancialDocument | undefined> {
+    const [doc] = await db.select().from(financialDocuments)
+      .where(and(eq(financialDocuments.emailId, emailId), eq(financialDocuments.userId, userId))).limit(1);
+    return doc;
+  }
+
+  async createFinancialDocument(data: InsertFinancialDocument): Promise<FinancialDocument> {
+    const [doc] = await db.insert(financialDocuments).values(data).returning();
+    return doc;
+  }
+
+  async updateFinancialDocument(id: string, userId: string, updates: Partial<FinancialDocument>): Promise<FinancialDocument | undefined> {
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    const [doc] = await db.update(financialDocuments).set(safeUpdates)
+      .where(and(eq(financialDocuments.id, id), eq(financialDocuments.userId, userId))).returning();
+    return doc;
+  }
+
+  // ─── Calendar ───────────────────────────────────────────────────────────────
+
+  async getCalendarEvents(userId: string, start?: Date, end?: Date): Promise<CalendarEvent[]> {
+    const conditions = [eq(calendarEvents.userId, userId)];
+    if (start) conditions.push(sql`${calendarEvents.endTime} >= ${start}`);
+    if (end) conditions.push(sql`${calendarEvents.startTime} <= ${end}`);
+    return db.select().from(calendarEvents).where(and(...conditions)).orderBy(asc(calendarEvents.startTime));
+  }
+
+  async getCalendarEvent(id: string, userId: string): Promise<CalendarEvent | undefined> {
+    const [event] = await db.select().from(calendarEvents)
+      .where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, userId))).limit(1);
+    return event;
+  }
+
+  async createCalendarEvent(data: InsertCalendarEvent): Promise<CalendarEvent> {
+    const [event] = await db.insert(calendarEvents).values(data).returning();
+    return event;
+  }
+
+  async updateCalendarEvent(id: string, userId: string, updates: Partial<CalendarEvent>): Promise<CalendarEvent | undefined> {
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    safeUpdates.updatedAt = new Date();
+    const [event] = await db.update(calendarEvents).set(safeUpdates)
+      .where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, userId))).returning();
+    return event;
+  }
+
+  async deleteCalendarEvent(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(calendarEvents)
+      .where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, userId))).returning();
+    return result.length > 0;
+  }
+
+  async getCalendarParticipants(eventId: string): Promise<CalendarParticipant[]> {
+    return db.select().from(calendarParticipants).where(eq(calendarParticipants.eventId, eventId));
+  }
+
+  async createCalendarParticipant(data: InsertCalendarParticipant): Promise<CalendarParticipant> {
+    const [p] = await db.insert(calendarParticipants).values(data).returning();
+    return p;
+  }
+
+  async getTimezoneConflicts(userId: string, resolved?: boolean): Promise<TimezoneConflict[]> {
+    const conditions = [eq(timezoneConflicts.userId, userId)];
+    if (resolved !== undefined) conditions.push(eq(timezoneConflicts.resolved, resolved));
+    return db.select().from(timezoneConflicts).where(and(...conditions)).orderBy(desc(timezoneConflicts.createdAt));
+  }
+
+  async createTimezoneConflict(data: InsertTimezoneConflict): Promise<TimezoneConflict> {
+    const [c] = await db.insert(timezoneConflicts).values(data).returning();
+    return c;
+  }
+
+  async updateTimezoneConflict(id: string, userId: string, updates: Partial<TimezoneConflict>): Promise<TimezoneConflict | undefined> {
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    const [c] = await db.update(timezoneConflicts).set(safeUpdates)
+      .where(and(eq(timezoneConflicts.id, id), eq(timezoneConflicts.userId, userId))).returning();
+    return c;
+  }
+
+  async getAvailabilitySlots(userId: string): Promise<AvailabilitySlot[]> {
+    return db.select().from(availabilitySlots)
+      .where(eq(availabilitySlots.userId, userId)).orderBy(asc(availabilitySlots.dayOfWeek));
+  }
+
+  async setAvailabilitySlots(userId: string, slots: InsertAvailabilitySlot[]): Promise<AvailabilitySlot[]> {
+    await db.delete(availabilitySlots).where(eq(availabilitySlots.userId, userId));
+    if (slots.length === 0) return [];
+    return db.insert(availabilitySlots).values(slots).returning();
+  }
+
+  // ─── Quarantine ─────────────────────────────────────────────────────────────
+
+  async getQuarantineActions(userId: string): Promise<QuarantineAction[]> {
+    return db.select().from(quarantineActions)
+      .where(eq(quarantineActions.userId, userId)).orderBy(desc(quarantineActions.createdAt));
+  }
+
+  async getQuarantineAction(emailId: string, userId: string): Promise<QuarantineAction | undefined> {
+    const [action] = await db.select().from(quarantineActions)
+      .where(and(eq(quarantineActions.emailId, emailId), eq(quarantineActions.userId, userId))).limit(1);
+    return action;
+  }
+
+  async createQuarantineAction(data: InsertQuarantineAction): Promise<QuarantineAction> {
+    const [action] = await db.insert(quarantineActions).values(data).returning();
+    return action;
+  }
+
+  async updateQuarantineAction(id: string, userId: string, updates: Partial<QuarantineAction>): Promise<QuarantineAction | undefined> {
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    const [action] = await db.update(quarantineActions).set(safeUpdates)
+      .where(and(eq(quarantineActions.id, id), eq(quarantineActions.userId, userId))).returning();
+    return action;
+  }
+
+  async getThreatScanLogs(emailId: string): Promise<ThreatScanLog[]> {
+    return db.select().from(threatScanLogs)
+      .where(eq(threatScanLogs.emailId, emailId)).orderBy(desc(threatScanLogs.createdAt));
+  }
+
+  async createThreatScanLog(data: InsertThreatScanLog): Promise<ThreatScanLog> {
+    const [log] = await db.insert(threatScanLogs).values(data).returning();
+    return log;
+  }
+
+  // ─── Threads ────────────────────────────────────────────────────────────────
+
+  async getEmailThread(threadId: string, userId: string): Promise<Email[]> {
+    return db.select().from(emails)
+      .where(and(eq(emails.userId, userId), eq(emails.threadId, threadId)))
+      .orderBy(asc(emails.timestamp));
+  }
+
+  async getOrCreateEmailThread(threadId: string, userId: string, data: InsertEmailThread): Promise<EmailThread> {
+    const [existing] = await db.select().from(emailThreads)
+      .where(and(eq(emailThreads.id, threadId), eq(emailThreads.userId, userId))).limit(1);
+    if (existing) {
+      const [updated] = await db.update(emailThreads)
+        .set({ messageCount: data.messageCount, lastMessageDate: data.lastMessageDate, updatedAt: new Date() })
+        .where(eq(emailThreads.id, threadId)).returning();
+      return updated;
+    }
+    const [thread] = await db.insert(emailThreads).values(data).returning();
+    return thread;
+  }
+
+  async getThreadSummary(threadId: string, userId: string): Promise<EmailThread | undefined> {
+    const [thread] = await db.select().from(emailThreads)
+      .where(and(eq(emailThreads.id, threadId), eq(emailThreads.userId, userId))).limit(1);
+    return thread;
+  }
+
+  async updateThreadSummary(threadId: string, userId: string, updates: Partial<EmailThread>): Promise<EmailThread | undefined> {
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    safeUpdates.updatedAt = new Date();
+    const [thread] = await db.update(emailThreads).set(safeUpdates)
+      .where(and(eq(emailThreads.id, threadId), eq(emailThreads.userId, userId))).returning();
+    return thread;
   }
 }
 

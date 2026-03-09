@@ -3,7 +3,7 @@ import type { Email, AgentActivity, CustomFolder } from "@shared/schema";
 const now = new Date();
 const h = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
 
-export const DEMO_EMAILS: Email[] = [
+export const DEMO_EMAILS: Email[] = ([
   {
     id: "demo-1",
     userId: "demo",
@@ -284,7 +284,7 @@ export const DEMO_EMAILS: Email[] = [
     aiProcessed: false,
     createdAt: h(48),
   },
-];
+] as unknown as Email[]);
 
 export const DEMO_COUNTS: Record<string, number> = {
   inbox: 8,
