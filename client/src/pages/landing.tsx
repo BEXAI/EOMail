@@ -7,22 +7,22 @@ const WALKTHROUGH_STEPS = [
     {
         title: "1. FinOps Autopilot",
         description: "Invoices and receipts are instantly detected, digested, and stored. EOMail extracts total amounts, sender information, and categorizes financial documents automatically so your accountant doesn't have to wait.",
-        placeholder: "[FinOps Interface Screenshot will go here]"
+        image: "/assets/finops_screenshot.png"
     },
     {
         title: "2. Chrono Logistics",
         description: "Meeting requests and scheduling emails are automatically recognized. Chrono drafts calendar invites, flags timezone conflicts, and pre-writes optimal responses to save you endless back-and-forth.",
-        placeholder: "[Chrono Scheduling Screenshot will go here]"
+        image: "/assets/chrono_screenshot.png"
     },
     {
         title: "3. Aegis Security",
         description: "Every inbound email is scanned via advanced heuristics. Phishing attempts and urgent social engineering attacks are quarantined instantly with clear danger breakdowns, protecting your team.",
-        placeholder: "[Aegis Threat Detection Screenshot will go here]"
+        image: "/assets/aegis_screenshot.png"
     },
     {
         title: "4. The EOMail Assistant",
         description: "When dealing with newsletter floods or dense threads, the EOMail core assistant digests the content into a 2-line summary so you instantly know what matters without reading a 40-reply chain.",
-        placeholder: "[EOMail Chat / Summary Screenshot will go here]"
+        image: "/assets/eomail_assistant.png"
     }
 ];
 
@@ -90,8 +90,8 @@ export default function LandingPage() {
 
                                         {/* Carousel Screenshot Area */}
                                         <div className="flex-[1.5] w-full bg-black/40 rounded-xl border border-white/10 aspect-[16/10] flex items-center justify-center overflow-hidden relative shadow-inner">
-                                            <div className="absolute inset-0 bg-gradient-to-tr from-blue-900/20 to-transparent z-0"></div>
-                                            <p className="text-xs font-mono text-muted-foreground z-10 text-center px-4">{step.placeholder}</p>
+                                            <div className="absolute inset-0 bg-gradient-to-tr from-blue-900/20 to-transparent z-10 pointer-events-none"></div>
+                                            <img src={step.image} alt={step.title} className="w-full h-full object-cover z-0" />
                                         </div>
 
                                     </div>
