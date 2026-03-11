@@ -11,10 +11,12 @@ import {
   type QuarantineAction, type InsertQuarantineAction,
   type ThreatScanLog, type InsertThreatScanLog,
   type EmailThread, type InsertEmailThread,
+  type UserPreferencesRow, type InsertUserPreferences,
+  type AiChatHistory, type InsertAiChatHistory,
   users, emails, agentActivity, customFolders,
   financialDocuments, calendarEvents, calendarParticipants,
   timezoneConflicts, availabilitySlots, quarantineActions,
-  threatScanLogs, emailThreads,
+  threatScanLogs, emailThreads, userPreferences, aiChatHistory,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, ilike, desc, asc, inArray, ne, not, like, sql, isNotNull } from "drizzle-orm";
@@ -81,8 +83,17 @@ export interface IStorage {
   getQuarantineAction(emailId: string, userId: string): Promise<QuarantineAction | undefined>;
   createQuarantineAction(data: InsertQuarantineAction): Promise<QuarantineAction>;
   updateQuarantineAction(id: string, userId: string, updates: Partial<QuarantineAction>): Promise<QuarantineAction | undefined>;
-  getThreatScanLogs(emailId: string): Promise<ThreatScanLog[]>;
+  getThreatScanLogs(emailId: string, userId?: string): Promise<ThreatScanLog[]>;
   createThreatScanLog(data: InsertThreatScanLog): Promise<ThreatScanLog>;
+
+  // User Preferences
+  getUserPreferencesRow(userId: string): Promise<UserPreferencesRow | undefined>;
+  upsertUserPreferences(userId: string, prefs: Partial<InsertUserPreferences>): Promise<UserPreferencesRow>;
+
+  // AI Chat History
+  getChatHistory(userId: string, emailId?: string): Promise<AiChatHistory[]>;
+  createChatMessage(data: InsertAiChatHistory): Promise<AiChatHistory>;
+  deleteChatHistory(userId: string, emailId?: string): Promise<void>;
 
   // Threads
   getEmailThread(threadId: string, userId: string): Promise<Email[]>;
@@ -198,7 +209,7 @@ export class DatabaseStorage implements IStorage {
   async updateEmail(id: string, userId: string, updates: EmailUpdates): Promise<Email | undefined> {
     const [email] = await db
       .update(emails)
-      .set(updates)
+      .set({ ...updates, updatedAt: new Date() })
       .where(and(eq(emails.id, id), eq(emails.userId, userId)))
       .returning();
     return email;
@@ -412,7 +423,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateFinancialDocument(id: string, userId: string, updates: Partial<FinancialDocument>): Promise<FinancialDocument | undefined> {
-    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...safeUpdates } = updates as any;
+    safeUpdates.updatedAt = new Date();
     const [doc] = await db.update(financialDocuments).set(safeUpdates)
       .where(and(eq(financialDocuments.id, id), eq(financialDocuments.userId, userId))).returning();
     return doc;
@@ -515,9 +527,11 @@ export class DatabaseStorage implements IStorage {
     return action;
   }
 
-  async getThreatScanLogs(emailId: string): Promise<ThreatScanLog[]> {
+  async getThreatScanLogs(emailId: string, userId?: string): Promise<ThreatScanLog[]> {
+    const conditions = [eq(threatScanLogs.emailId, emailId)];
+    if (userId) conditions.push(eq(threatScanLogs.userId, userId));
     return db.select().from(threatScanLogs)
-      .where(eq(threatScanLogs.emailId, emailId)).orderBy(desc(threatScanLogs.createdAt));
+      .where(and(...conditions)).orderBy(desc(threatScanLogs.createdAt));
   }
 
   async createThreatScanLog(data: InsertThreatScanLog): Promise<ThreatScanLog> {
@@ -558,6 +572,47 @@ export class DatabaseStorage implements IStorage {
     const [thread] = await db.update(emailThreads).set(safeUpdates)
       .where(and(eq(emailThreads.id, threadId), eq(emailThreads.userId, userId))).returning();
     return thread;
+  }
+
+  // ─── User Preferences ──────────────────────────────────────────────────────
+
+  async getUserPreferencesRow(userId: string): Promise<UserPreferencesRow | undefined> {
+    const [prefs] = await db.select().from(userPreferences)
+      .where(eq(userPreferences.userId, userId)).limit(1);
+    return prefs;
+  }
+
+  async upsertUserPreferences(userId: string, prefs: Partial<InsertUserPreferences>): Promise<UserPreferencesRow> {
+    const [result] = await db.insert(userPreferences)
+      .values({ userId, ...prefs })
+      .onConflictDoUpdate({
+        target: userPreferences.userId,
+        set: { ...prefs, updatedAt: new Date() },
+      })
+      .returning();
+    return result;
+  }
+
+  // ─── AI Chat History ───────────────────────────────────────────────────────
+
+  async getChatHistory(userId: string, emailId?: string): Promise<AiChatHistory[]> {
+    const conditions = [eq(aiChatHistory.userId, userId)];
+    if (emailId) conditions.push(eq(aiChatHistory.emailId, emailId));
+    return db.select().from(aiChatHistory)
+      .where(and(...conditions))
+      .orderBy(asc(aiChatHistory.createdAt))
+      .limit(100);
+  }
+
+  async createChatMessage(data: InsertAiChatHistory): Promise<AiChatHistory> {
+    const [msg] = await db.insert(aiChatHistory).values(data).returning();
+    return msg;
+  }
+
+  async deleteChatHistory(userId: string, emailId?: string): Promise<void> {
+    const conditions = [eq(aiChatHistory.userId, userId)];
+    if (emailId) conditions.push(eq(aiChatHistory.emailId, emailId));
+    await db.delete(aiChatHistory).where(and(...conditions));
   }
 }
 

@@ -88,7 +88,7 @@ export async function draftReply(
 ): Promise<string> {
   try {
     const prefsKey = userId || userDisplayName;
-    const prefs = getUserPreferences(prefsKey);
+    const prefs = await getUserPreferences(prefsKey);
     const effectiveTone = (tone as typeof prefs.default_tone) || prefs.default_tone;
     const emailContext = buildEmailContext(originalEmail, userDisplayName);
 
@@ -233,7 +233,7 @@ export async function expandDraft(
 ): Promise<string> {
   try {
     const prefsKey = userId || userDisplayName;
-    const prefs = getUserPreferences(prefsKey);
+    const prefs = await getUserPreferences(prefsKey);
     const prompt = buildDraftExpanderPrompt({
       shorthand_notes: shorthandNotes,
       recipient_metadata: {

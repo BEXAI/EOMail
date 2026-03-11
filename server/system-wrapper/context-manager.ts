@@ -1,4 +1,5 @@
 import type { Email } from "@shared/schema";
+import { storage } from "../storage";
 
 export interface UserPreferences {
   preferred_signature: string;
@@ -35,17 +36,50 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 const MAX_PREFERENCE_STORE_SIZE = 5000;
 const preferenceStore = new Map<string, UserPreferences>();
 
-export function getUserPreferences(userId: string): UserPreferences {
-  return preferenceStore.get(userId) ?? { ...DEFAULT_PREFERENCES };
+export async function getUserPreferences(userId: string): Promise<UserPreferences> {
+  const cached = preferenceStore.get(userId);
+  if (cached) return cached;
+
+  try {
+    const row = await storage.getUserPreferencesRow(userId);
+    if (row) {
+      const prefs: UserPreferences = {
+        preferred_signature: row.preferredSignature || "",
+        default_tone: (row.defaultTone as UserPreferences["default_tone"]) || "professional",
+        industry_jargon_toggle: row.industryJargonToggle || false,
+        formality_level: (row.formalityLevel as UserPreferences["formality_level"]) || 3,
+      };
+      preferenceStore.set(userId, prefs);
+      return prefs;
+    }
+  } catch {
+    // Fall through to defaults on DB error
+  }
+
+  return { ...DEFAULT_PREFERENCES };
 }
 
-export function setUserPreferences(
+export async function setUserPreferences(
   userId: string,
   prefs: Partial<UserPreferences>
-): UserPreferences {
-  const existing = getUserPreferences(userId);
+): Promise<UserPreferences> {
+  const existing = await getUserPreferences(userId);
   const updated = { ...existing, ...prefs };
-  // Evict oldest entry if at capacity
+
+  // Persist to DB
+  try {
+    await storage.upsertUserPreferences(userId, {
+      userId,
+      preferredSignature: updated.preferred_signature,
+      defaultTone: updated.default_tone,
+      industryJargonToggle: updated.industry_jargon_toggle,
+      formalityLevel: updated.formality_level,
+    });
+  } catch (e) {
+    console.error("Failed to persist user preferences:", e);
+  }
+
+  // Update cache
   if (!preferenceStore.has(userId) && preferenceStore.size >= MAX_PREFERENCE_STORE_SIZE) {
     const firstKey = preferenceStore.keys().next().value;
     if (firstKey) preferenceStore.delete(firstKey);

@@ -59,6 +59,9 @@ export function FinOpsPanel({ isDemo }: FinOpsPanelProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/finance/documents"] });
       toast({ title: "Document confirmed" });
     },
+    onError: () => {
+      toast({ title: "Failed to confirm document", description: "Please try again.", variant: "destructive" });
+    },
   });
 
   const rejectMutation = useMutation({
@@ -68,6 +71,9 @@ export function FinOpsPanel({ isDemo }: FinOpsPanelProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/finance/documents"] });
       toast({ title: "Document rejected" });
+    },
+    onError: () => {
+      toast({ title: "Failed to reject document", description: "Please try again.", variant: "destructive" });
     },
   });
 
@@ -92,7 +98,7 @@ export function FinOpsPanel({ isDemo }: FinOpsPanelProps) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+      <div className="px-4 md:px-6 pt-6 pb-4 border-b border-border shrink-0">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
             <DollarSign className="w-5 h-5 text-emerald-500" />
@@ -103,7 +109,7 @@ export function FinOpsPanel({ isDemo }: FinOpsPanelProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           <Card>
             <CardContent className="p-3 text-center">
               <p className="text-2xl font-bold text-foreground">{docs.length}</p>
@@ -139,11 +145,12 @@ export function FinOpsPanel({ isDemo }: FinOpsPanelProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-4 space-y-3">
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-4 md:px-6 py-4 space-y-3">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Receipt className="w-12 h-12 text-muted-foreground/40 mb-3" />
-            <p className="text-sm text-muted-foreground">No financial documents found</p>
+            <p className="text-sm font-medium text-foreground mb-1">No financial documents</p>
+            <p className="text-xs text-muted-foreground max-w-xs">FinOps Autopilot automatically extracts invoices, receipts, and billing data from your emails. Documents will appear here once detected.</p>
           </div>
         ) : (
           filtered.map((doc) => (
@@ -251,6 +258,7 @@ function FinancialDocCard({
               className="gap-1.5 text-xs"
               onClick={onConfirm}
               disabled={isConfirming || isDemo}
+              aria-label="Confirm financial document"
             >
               {isConfirming ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
               Confirm
@@ -261,6 +269,7 @@ function FinancialDocCard({
               className="gap-1.5 text-xs"
               onClick={onReject}
               disabled={isRejecting || isDemo}
+              aria-label="Reject financial document"
             >
               {isRejecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
               Reject

@@ -53,6 +53,9 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/events"] });
       toast({ title: "Event deleted" });
     },
+    onError: () => {
+      toast({ title: "Failed to delete event", description: "Please try again.", variant: "destructive" });
+    },
   });
 
   const resolveConflictMutation = useMutation({
@@ -62,6 +65,9 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/conflicts"] });
       toast({ title: "Conflict resolved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to resolve conflict", description: "Please try again.", variant: "destructive" });
     },
   });
 
@@ -82,7 +88,7 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+      <div className="px-4 md:px-6 pt-6 pb-4 border-b border-border shrink-0">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
             <Calendar className="w-5 h-5 text-blue-500" />
@@ -112,11 +118,12 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
             </TabsList>
           </div>
 
-          <TabsContent value="events" className="flex-1 overflow-y-auto px-6 py-4 space-y-3 mt-0">
+          <TabsContent value="events" className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-3 mt-0 transition-all duration-200">
             {sortedEvents.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <CalendarX className="w-12 h-12 text-muted-foreground/40 mb-3" />
-                <p className="text-sm text-muted-foreground">No upcoming events</p>
+                <p className="text-sm font-medium text-foreground mb-1">No upcoming events</p>
+                <p className="text-xs text-muted-foreground max-w-xs">Chrono Logistics automatically extracts meetings and calendar events from your emails. Events will appear here once detected.</p>
               </div>
             ) : (
               sortedEvents.map((event) => (
@@ -131,11 +138,12 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
             )}
           </TabsContent>
 
-          <TabsContent value="conflicts" className="flex-1 overflow-y-auto px-6 py-4 space-y-3 mt-0">
+          <TabsContent value="conflicts" className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-3 mt-0 transition-all duration-200">
             {unresolvedConflicts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <Check className="w-12 h-12 text-green-500/40 mb-3" />
-                <p className="text-sm text-muted-foreground">No scheduling conflicts</p>
+                <p className="text-sm font-medium text-foreground mb-1">No scheduling conflicts</p>
+                <p className="text-xs text-muted-foreground max-w-xs">Chrono Logistics monitors timezone differences and scheduling overlaps across your meetings. Conflicts will appear here.</p>
               </div>
             ) : (
               unresolvedConflicts.map((conflict) => (
@@ -265,6 +273,7 @@ function EventCard({
               className="gap-1 text-xs text-muted-foreground h-7"
               onClick={onDelete}
               disabled={isDeleting || isDemo}
+              aria-label="Remove calendar event"
             >
               {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
               Remove
@@ -314,6 +323,7 @@ function ConflictCard({
               className="gap-1 text-xs h-7"
               onClick={onResolve}
               disabled={isResolving || isDemo}
+              aria-label="Mark conflict as resolved"
             >
               {isResolving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
               Mark Resolved

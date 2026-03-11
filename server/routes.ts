@@ -37,10 +37,16 @@ const aiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const VALID_FOLDERS = ["inbox", "starred", "sent", "drafts", "archive", "spam", "trash", "quarantine"];
+const folderSchema = z.string().refine(
+  (val) => VALID_FOLDERS.includes(val) || val.startsWith("custom:"),
+  { message: "Invalid folder name" }
+);
+
 const emailUpdateSchema = z.object({
   read: z.boolean().optional(),
   starred: z.boolean().optional(),
-  folder: z.string().optional(),
+  folder: folderSchema.optional(),
   labels: z.array(z.string()).optional(),
   to: z.string().optional(),
   toEmail: z.string().optional(),
@@ -57,10 +63,69 @@ const bulkActionSchema = z.object({
   updates: z.object({
     read: z.boolean().optional(),
     starred: z.boolean().optional(),
-    folder: z.string().optional(),
+    folder: folderSchema.optional(),
     labels: z.array(z.string()).optional(),
   }).strict().optional(),
 });
+
+const financialDocumentUpdateSchema = z.object({
+  status: z.enum(["extracted", "confirmed", "rejected"]).optional(),
+  vendorName: z.string().max(200).optional(),
+  vendorEmail: z.string().email().optional(),
+  invoiceNumber: z.string().max(100).optional(),
+  paymentStatus: z.string().max(50).optional(),
+  confirmedAt: z.string().datetime().optional(),
+}).strict();
+
+const timezoneConflictUpdateSchema = z.object({
+  resolved: z.boolean().optional(),
+  details: z.string().max(500).optional(),
+}).strict();
+
+const availabilitySlotSchema = z.object({
+  dayOfWeek: z.number().int().min(0).max(6),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM format"),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM format"),
+  timezone: z.string().max(100).optional(),
+  isAvailable: z.boolean().optional(),
+  priority: z.number().int().min(1).max(5).optional(),
+});
+
+const calendarEventUpdateSchema = z.object({
+  title: z.string().max(200).optional(),
+  description: z.string().max(2000).optional(),
+  startTime: z.string().datetime().optional(),
+  endTime: z.string().datetime().optional(),
+  timezone: z.string().max(100).optional(),
+  location: z.string().max(500).optional(),
+  meetingUrl: z.string().url().max(500).optional().or(z.literal("")),
+  status: z.enum(["pending", "confirmed", "cancelled"]).optional(),
+}).strict();
+
+const createCalendarEventSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  startTime: z.string().datetime(),
+  endTime: z.string().datetime(),
+  timezone: z.string().max(100).optional(),
+  location: z.string().max(500).optional(),
+  meetingUrl: z.string().url().max(500).optional(),
+  status: z.enum(["pending", "confirmed", "cancelled"]).optional(),
+}).strict();
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+}
+
+function apiError(res: any, status: number, code: string, message: string) {
+  return res.status(status).json({ error: message, code });
+}
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   app.use("/api/", apiLimiter);
@@ -332,12 +397,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         validated.push({ role: msg.role, content: msg.content.slice(0, 2000) });
       }
+      const emailId = req.body.emailId as string | undefined;
       const { context: emailContext, count: emailCount } = await emailContextIndex.getContextWithCount(userId);
       const response = await handleAiChat(validated, emailContext, emailCount);
+
+      // Persist the last user message and assistant response
+      const lastUserMsg = validated[validated.length - 1];
+      if (lastUserMsg) {
+        storage.createChatMessage({ userId, emailId, role: lastUserMsg.role, content: lastUserMsg.content }).catch(() => {});
+      }
+      storage.createChatMessage({ userId, emailId, role: "assistant", content: response }).catch(() => {});
+
       res.json({ response });
     } catch (e) {
       console.error("AI chat error:", e);
       res.status(500).json({ error: "Failed to process chat message" });
+    }
+  });
+
+  app.get("/api/ai/chat/history", requireAuth, async (req, res) => {
+    try {
+      const emailId = req.query.emailId as string | undefined;
+      const history = await storage.getChatHistory(req.user!.id, emailId);
+      res.json(history);
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to fetch chat history");
+    }
+  });
+
+  app.delete("/api/ai/chat/history", requireAuth, async (req, res) => {
+    try {
+      const emailId = req.query.emailId as string | undefined;
+      await storage.deleteChatHistory(req.user!.id, emailId);
+      res.json({ success: true });
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to delete chat history");
     }
   });
 
@@ -349,7 +443,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!email.aiDraftReply) return res.status(400).json({ error: "No draft reply to approve" });
 
       const now = new Date();
-      const replyBody = `<p>${email.aiDraftReply.replace(/\n/g, "</p><p>")}</p>`;
+      const replyBody = `<p>${escapeHtml(email.aiDraftReply).replace(/\n/g, "</p><p>")}</p>`;
       const replySubject = `Re: ${email.subject}`;
 
       const senderMailbox = (req.user as any).mailboxAddress || req.user!.email;
@@ -696,7 +790,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/user/preferences", requireAuth, async (req, res) => {
     try {
-      const prefs = getUserPreferences(req.user!.id);
+      const prefs = await getUserPreferences(req.user!.id);
       res.json(prefs);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch preferences" });
@@ -714,7 +808,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const parsed = preferencesSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid preferences", details: parsed.error.issues });
-      const updated = setUserPreferences(req.user!.id, parsed.data);
+      const updated = await setUserPreferences(req.user!.id, parsed.data);
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: "Failed to update preferences" });
@@ -747,11 +841,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/finance/documents/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateFinancialDocument(req.params.id, req.user!.id, req.body);
-      if (!updated) return res.status(404).json({ error: "Document not found" });
+      const parsed = financialDocumentUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid document update");
+      const updated = await storage.updateFinancialDocument(req.params.id, req.user!.id, parsed.data as any);
+      if (!updated) return apiError(res, 404, "NOT_FOUND", "Document not found");
       res.json(updated);
     } catch (e) {
-      res.status(500).json({ error: "Failed to update document" });
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to update document");
     }
   });
 
@@ -784,6 +880,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.post("/api/calendar/events", requireAuth, async (req, res) => {
+    try {
+      const parsed = createCalendarEventSchema.safeParse(req.body);
+      if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid event data");
+      const event = await storage.createCalendarEvent({
+        userId: req.user!.id,
+        title: parsed.data.title,
+        description: parsed.data.description,
+        startTime: new Date(parsed.data.startTime),
+        endTime: new Date(parsed.data.endTime),
+        timezone: parsed.data.timezone || "America/New_York",
+        location: parsed.data.location,
+        meetingUrl: parsed.data.meetingUrl,
+        status: parsed.data.status || "pending",
+      });
+      res.status(201).json(event);
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to create event");
+    }
+  });
+
+  app.patch("/api/calendar/events/:id", requireAuth, async (req, res) => {
+    try {
+      const parsed = calendarEventUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid event update");
+      const updates: any = { ...parsed.data };
+      if (updates.startTime) updates.startTime = new Date(updates.startTime);
+      if (updates.endTime) updates.endTime = new Date(updates.endTime);
+      const updated = await storage.updateCalendarEvent(req.params.id, req.user!.id, updates);
+      if (!updated) return apiError(res, 404, "NOT_FOUND", "Event not found");
+      res.json(updated);
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to update event");
+    }
+  });
+
   app.delete("/api/calendar/events/:id", requireAuth, async (req, res) => {
     try {
       const deleted = await storage.deleteCalendarEvent(req.params.id, req.user!.id);
@@ -806,10 +938,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.put("/api/calendar/availability", requireAuth, async (req, res) => {
     try {
-      const { slots } = req.body;
-      if (!Array.isArray(slots)) return res.status(400).json({ error: "slots array required" });
+      const slotsArray = z.array(availabilitySlotSchema).max(50);
+      const parsed = z.object({ slots: slotsArray }).safeParse(req.body);
+      if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid availability slots");
       const userId = req.user!.id;
-      const typedSlots = slots.map((s: { dayOfWeek: number; startTime: string; endTime: string; timezone?: string; isAvailable?: boolean; priority?: number }) => ({
+      const typedSlots = parsed.data.slots.map((s) => ({
         userId,
         dayOfWeek: s.dayOfWeek,
         startTime: s.startTime,
@@ -821,7 +954,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const savedSlots = await storage.setAvailabilitySlots(userId, typedSlots);
       res.json(savedSlots);
     } catch (e) {
-      res.status(500).json({ error: "Failed to save availability" });
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to save availability");
     }
   });
 
@@ -838,11 +971,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/calendar/conflicts/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateTimezoneConflict(req.params.id, req.user!.id, req.body);
-      if (!updated) return res.status(404).json({ error: "Conflict not found" });
+      const parsed = timezoneConflictUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid conflict update");
+      const updated = await storage.updateTimezoneConflict(req.params.id, req.user!.id, parsed.data as any);
+      if (!updated) return apiError(res, 404, "NOT_FOUND", "Conflict not found");
       res.json(updated);
     } catch (e) {
-      res.status(500).json({ error: "Failed to update conflict" });
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to update conflict");
     }
   });
 
@@ -920,10 +1055,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/security/scan-logs/:emailId", requireAuth, async (req, res) => {
     try {
-      const logs = await storage.getThreatScanLogs(req.params.emailId);
+      const userId = req.user!.id;
+      const email = await storage.getEmail(req.params.emailId, userId);
+      if (!email) return apiError(res, 404, "NOT_FOUND", "Email not found");
+      const logs = await storage.getThreatScanLogs(req.params.emailId, userId);
       res.json(logs);
     } catch (e) {
-      res.status(500).json({ error: "Failed to fetch scan logs" });
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to fetch scan logs");
     }
   });
 

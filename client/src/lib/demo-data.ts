@@ -307,7 +307,7 @@ export const DEMO_COUNTS: Record<string, number> = {
   all: 10,
   finops: 2,
   calendar: 1,
-  security: 0,
+  security: 2,
 };
 
 export const DEMO_AGENT_ACTIVITY: AgentActivity[] = [
@@ -518,11 +518,99 @@ export const DEMO_CALENDAR_EVENTS: (CalendarEvent & { participants?: CalendarPar
       { id: "demo-part-3", eventId: "demo-cal-1", email: "team@techventures.io", name: "Tech Ventures Team", status: "pending", isOptional: true, createdAt: h(4) },
     ],
   },
+  {
+    id: "demo-cal-2",
+    userId: "demo",
+    emailId: "demo-6",
+    title: "Acme Corp Client Presentation",
+    description: "Final presentation for $500K deal — ROI analysis, implementation timeline, competitive comparison",
+    startTime: (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; })(),
+    endTime: (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(10, 30, 0, 0); return d; })(),
+    timezone: "America/New_York",
+    location: null,
+    meetingUrl: "https://meet.google.com/abc-defg-hij",
+    status: "confirmed",
+    organizerEmail: "alex.kim@acmecorp.com",
+    recurrenceRule: null,
+    createdAt: h(1),
+    updatedAt: h(1),
+    participants: [
+      { id: "demo-part-4", eventId: "demo-cal-2", email: "alex.kim@acmecorp.com", name: "Alex Kim", status: "accepted", isOptional: false, createdAt: h(1) },
+      { id: "demo-part-5", eventId: "demo-cal-2", email: "demo@eomail.co", name: "Demo User", status: "accepted", isOptional: false, createdAt: h(1) },
+    ],
+  },
 ] as unknown as (CalendarEvent & { participants?: CalendarParticipant[] })[]);
 
-export const DEMO_QUARANTINE_ACTIONS: QuarantineAction[] = [];
+export const DEMO_QUARANTINE_ACTIONS: QuarantineAction[] = ([
+  {
+    id: "demo-quarantine-1",
+    userId: "demo",
+    emailId: "demo-quarantine-email-1",
+    threatScore: 92,
+    threatType: "phishing",
+    quarantineReason: "Impersonation attempt detected: Sender claims to be PayPal but email originates from paypa1-secure.xyz domain. Contains credential harvesting link.",
+    detectedUrls: ["https://paypa1-secure.xyz/login/verify", "https://paypa1-secure.xyz/account/confirm"],
+    neutralizedUrls: ["https://paypa1-secure.xyz/login/verify [BLOCKED]", "https://paypa1-secure.xyz/account/confirm [BLOCKED]"],
+    domainAnalysis: { registeredDaysAgo: 3, tlsValid: false, spfPass: false, dkimPass: false },
+    autoQuarantined: true,
+    releaseStatus: "quarantined",
+    reviewedAt: null,
+    createdAt: h(5),
+  },
+  {
+    id: "demo-quarantine-2",
+    userId: "demo",
+    emailId: "demo-quarantine-email-2",
+    threatScore: 67,
+    threatType: "urgency_scam",
+    quarantineReason: "High-pressure urgency language detected. Claims immediate action required to avoid account suspension. Suspicious sender domain.",
+    detectedUrls: ["https://secure-verify-now.com/action"],
+    neutralizedUrls: ["https://secure-verify-now.com/action [BLOCKED]"],
+    domainAnalysis: { registeredDaysAgo: 14, tlsValid: true, spfPass: false, dkimPass: true },
+    autoQuarantined: true,
+    releaseStatus: "quarantined",
+    reviewedAt: null,
+    createdAt: h(18),
+  },
+  {
+    id: "demo-quarantine-3",
+    userId: "demo",
+    emailId: "demo-quarantine-email-3",
+    threatScore: 45,
+    threatType: "suspicious_links",
+    quarantineReason: "URL shortener detected in otherwise legitimate-looking email. Released after manual review confirmed safe sender.",
+    detectedUrls: ["https://bit.ly/3xY9abc"],
+    neutralizedUrls: null,
+    domainAnalysis: null,
+    autoQuarantined: true,
+    releaseStatus: "released",
+    reviewedAt: h(10),
+    createdAt: h(24),
+  },
+] as unknown as QuarantineAction[]);
 
-export const DEMO_TIMEZONE_CONFLICTS: TimezoneConflict[] = [];
+export const DEMO_TIMEZONE_CONFLICTS: TimezoneConflict[] = ([
+  {
+    id: "demo-conflict-1",
+    eventId: "demo-cal-1",
+    userId: "demo",
+    conflictType: "outside_working_hours",
+    severity: "high",
+    details: "Q1 Strategy Meeting at 2:00 PM PST falls at 11:00 PM for participant in London (GMT). Consider rescheduling to accommodate all timezones.",
+    resolved: false,
+    createdAt: h(4),
+  },
+  {
+    id: "demo-conflict-2",
+    eventId: "demo-cal-1",
+    userId: "demo",
+    conflictType: "timezone_mismatch",
+    severity: "medium",
+    details: "Team member in Tokyo (JST) would need to join at 7:00 AM local time. Within working hours but may conflict with morning meetings.",
+    resolved: false,
+    createdAt: h(4),
+  },
+] as unknown as TimezoneConflict[]);
 
 export const DEMO_THREAD_SUMMARIES: EmailThread[] = ([
   {

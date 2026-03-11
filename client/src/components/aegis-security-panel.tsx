@@ -50,6 +50,9 @@ export function AegisSecurityPanel({ isDemo }: AegisSecurityPanelProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
       toast({ title: "Email released from quarantine" });
     },
+    onError: () => {
+      toast({ title: "Failed to release email", description: "Please try again.", variant: "destructive" });
+    },
   });
 
   const quarantined = quarantine.filter((q) => q.releaseStatus === "quarantined");
@@ -72,7 +75,7 @@ export function AegisSecurityPanel({ isDemo }: AegisSecurityPanelProps) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+      <div className="px-4 md:px-6 pt-6 pb-4 border-b border-border shrink-0">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
             <Shield className="w-5 h-5 text-red-500" />
@@ -83,10 +86,10 @@ export function AegisSecurityPanel({ isDemo }: AegisSecurityPanelProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-2xl font-bold text-red-500">{quarantined.length}</p>
+              <p className="text-2xl font-bold text-red-500" role="status">{quarantined.length}</p>
               <p className="text-xs text-muted-foreground">Quarantined</p>
             </CardContent>
           </Card>
@@ -105,12 +108,12 @@ export function AegisSecurityPanel({ isDemo }: AegisSecurityPanelProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-4 space-y-3">
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-4 md:px-6 py-4 space-y-3">
         {quarantine.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <ShieldCheck className="w-12 h-12 text-green-500/40 mb-3" />
             <p className="text-sm font-medium text-foreground mb-1">All Clear</p>
-            <p className="text-xs text-muted-foreground">No threats detected. Your inbox is secure.</p>
+            <p className="text-xs text-muted-foreground max-w-xs">Aegis Gatekeeper scans every inbound email for phishing, impersonation, and malicious links. Suspicious activity will appear here.</p>
           </div>
         ) : (
           quarantine.map((action) => (
@@ -226,6 +229,7 @@ function QuarantineCard({
               className="gap-1 text-xs"
               onClick={onRelease}
               disabled={isReleasing || isDemo}
+              aria-label="Release email from quarantine"
             >
               {isReleasing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Unlock className="w-3 h-3" />}
               Release

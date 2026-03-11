@@ -55,6 +55,7 @@ export const emails = pgTable("emails", {
   threadSubject: text("thread_subject"),
   threadPosition: integer("thread_position"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("emails_user_id_idx").on(table.userId),
   index("emails_folder_idx").on(table.folder),
@@ -135,6 +136,7 @@ export const financialDocuments = pgTable("financial_documents", {
   rawExtraction: jsonb("raw_extraction"),
   confirmedAt: timestamp("confirmed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("fin_docs_user_idx").on(table.userId),
   index("fin_docs_email_idx").on(table.emailId),
@@ -142,7 +144,7 @@ export const financialDocuments = pgTable("financial_documents", {
   index("fin_docs_vendor_idx").on(table.userId, table.vendorName),
 ]);
 
-export const insertFinancialDocumentSchema = createInsertSchema(financialDocuments).omit({ id: true, createdAt: true });
+export const insertFinancialDocumentSchema = createInsertSchema(financialDocuments).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertFinancialDocument = z.infer<typeof insertFinancialDocumentSchema>;
 export type FinancialDocument = typeof financialDocuments.$inferSelect;
 
@@ -246,6 +248,7 @@ export const quarantineActions = pgTable("quarantine_actions", {
   index("quarantine_user_idx").on(table.userId),
   index("quarantine_email_idx").on(table.emailId),
   index("quarantine_status_idx").on(table.userId, table.releaseStatus),
+  index("quarantine_user_email_idx").on(table.userId, table.emailId),
 ]);
 
 export const insertQuarantineActionSchema = createInsertSchema(quarantineActions).omit({ id: true, createdAt: true });
@@ -265,6 +268,7 @@ export const threatScanLogs = pgTable("threat_scan_logs", {
 }, (table) => [
   index("scan_logs_email_idx").on(table.emailId),
   index("scan_logs_user_idx").on(table.userId),
+  index("scan_logs_user_email_idx").on(table.userId, table.emailId),
 ]);
 
 export const insertThreatScanLogSchema = createInsertSchema(threatScanLogs).omit({ id: true, createdAt: true });
@@ -294,4 +298,41 @@ export const emailThreads = pgTable("email_threads", {
 export const insertEmailThreadSchema = createInsertSchema(emailThreads).omit({ createdAt: true, updatedAt: true });
 export type InsertEmailThread = z.infer<typeof insertEmailThreadSchema>;
 export type EmailThread = typeof emailThreads.$inferSelect;
+
+// ─── User Preferences ──────────────────────────────────────────────────────
+
+export const userPreferences = pgTable("user_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  preferredSignature: text("preferred_signature").default(""),
+  defaultTone: text("default_tone").default("professional"),
+  industryJargonToggle: boolean("industry_jargon_toggle").default(false),
+  formalityLevel: integer("formality_level").default(3),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("user_prefs_user_idx").on(table.userId),
+]);
+
+export const insertUserPreferencesSchema = createInsertSchema(userPreferences).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertUserPreferences = z.infer<typeof insertUserPreferencesSchema>;
+export type UserPreferencesRow = typeof userPreferences.$inferSelect;
+
+// ─── AI Chat History ────────────────────────────────────────────────────────
+
+export const aiChatHistory = pgTable("ai_chat_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emailId: varchar("email_id").references(() => emails.id, { onDelete: "set null" }),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("ai_chat_history_user_idx").on(table.userId),
+  index("ai_chat_history_email_idx").on(table.emailId),
+]);
+
+export const insertAiChatHistorySchema = createInsertSchema(aiChatHistory).omit({ id: true, createdAt: true });
+export type InsertAiChatHistory = z.infer<typeof insertAiChatHistorySchema>;
+export type AiChatHistory = typeof aiChatHistory.$inferSelect;
 
