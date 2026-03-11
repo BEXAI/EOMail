@@ -1,0 +1,1069 @@
+import type { Express } from "express";
+import { type Server } from "http";
+import crypto from "crypto";
+import rateLimit from "express-rate-limit";
+import { z } from "zod";
+import { storage } from "./storage";
+import { insertEmailSchema, type InsertEmail } from "@shared/schema";
+import { requireAuth } from "./auth";
+import { processEmail, processAllUnprocessed, processThreadDigests } from "./ai-pipeline";
+import { draftReply, generateBriefing, handleAiCommand, handleAiChat, classifyEmail, expandDraft, suggestOptimalTime, type ChatMessage } from "./ai";
+import { sendEmail } from "./email";
+import { getCache, setCache, invalidateCache } from "./cache";
+import { emailContextIndex } from "./ai-context";
+import { getUserPreferences, setUserPreferences } from "./system-wrapper/context-manager";
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: "Too many attempts, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: "Too many requests, please slow down" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 2 * 60 * 60 * 1000, // 2 hours
+  max: 50,
+  message: { error: "AI request limit reached. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const VALID_FOLDERS = ["inbox", "starred", "sent", "drafts", "archive", "spam", "trash", "quarantine"];
+const folderSchema = z.string().refine(
+  (val) => VALID_FOLDERS.includes(val) || val.startsWith("custom:"),
+  { message: "Invalid folder name" }
+);
+
+const emailUpdateSchema = z.object({
+  read: z.boolean().optional(),
+  starred: z.boolean().optional(),
+  folder: folderSchema.optional(),
+  labels: z.array(z.string()).optional(),
+  to: z.string().optional(),
+  toEmail: z.string().optional(),
+  cc: z.string().optional(),
+  bcc: z.string().optional(),
+  subject: z.string().optional(),
+  body: z.string().optional(),
+  preview: z.string().optional(),
+}).strict();
+
+const bulkActionSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+  action: z.enum(["update", "delete"]),
+  updates: z.object({
+    read: z.boolean().optional(),
+    starred: z.boolean().optional(),
+    folder: folderSchema.optional(),
+    labels: z.array(z.string()).optional(),
+  }).strict().optional(),
+});
+
+const financialDocumentUpdateSchema = z.object({
+  status: z.enum(["extracted", "confirmed", "rejected"]).optional(),
+  vendorName: z.string().max(200).optional(),
+  vendorEmail: z.string().email().optional(),
+  invoiceNumber: z.string().max(100).optional(),
+  paymentStatus: z.string().max(50).optional(),
+  confirmedAt: z.string().datetime().optional(),
+}).strict();
+
+const timezoneConflictUpdateSchema = z.object({
+  resolved: z.boolean().optional(),
+  details: z.string().max(500).optional(),
+}).strict();
+
+const availabilitySlotSchema = z.object({
+  dayOfWeek: z.number().int().min(0).max(6),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM format"),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM format"),
+  timezone: z.string().max(100).optional(),
+  isAvailable: z.boolean().optional(),
+  priority: z.number().int().min(1).max(5).optional(),
+});
+
+const calendarEventUpdateSchema = z.object({
+  title: z.string().max(200).optional(),
+  description: z.string().max(2000).optional(),
+  startTime: z.string().datetime().optional(),
+  endTime: z.string().datetime().optional(),
+  timezone: z.string().max(100).optional(),
+  location: z.string().max(500).optional(),
+  meetingUrl: z.string().url().max(500).optional().or(z.literal("")),
+  status: z.enum(["pending", "confirmed", "cancelled"]).optional(),
+}).strict();
+
+const createCalendarEventSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  startTime: z.string().datetime(),
+  endTime: z.string().datetime(),
+  timezone: z.string().max(100).optional(),
+  location: z.string().max(500).optional(),
+  meetingUrl: z.string().url().max(500).optional(),
+  status: z.enum(["pending", "confirmed", "cancelled"]).optional(),
+}).strict();
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+}
+
+function apiError(res: any, status: number, code: string, message: string) {
+  return res.status(status).json({ error: message, code });
+}
+
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  app.use("/api/", apiLimiter);
+  app.use("/api/auth/login", authLimiter);
+  app.use("/api/auth/register", authLimiter);
+  app.use("/api/ai/", aiLimiter);
+  app.get("/api/emails", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const folder = (req.query.folder as string) || "inbox";
+      const search = req.query.search as string | undefined;
+      const label = req.query.label as string | undefined;
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
+      const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+      const offset = (page - 1) * limit;
+      const emails = await storage.getEmails(userId, folder, search, label, limit, offset);
+      res.json(emails);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch emails" });
+    }
+  });
+
+  app.get("/api/emails/counts", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const [counts, finDocs, calEvents, quarantine] = await Promise.all([
+        storage.getEmailCounts(userId),
+        storage.getFinancialDocuments(userId, { status: "extracted" }),
+        storage.getCalendarEvents(userId),
+        storage.getQuarantineActions(userId),
+      ]);
+      counts.finops = finDocs.length;
+      counts.calendar = calEvents.length;
+      counts.security = quarantine.filter((q) => q.releaseStatus === "quarantined").length;
+      res.json(counts);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch counts" });
+    }
+  });
+
+  app.get("/api/emails/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const email = await storage.getEmail(req.params.id, userId);
+      if (!email) return res.status(404).json({ error: "Email not found" });
+      res.json(email);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch email" });
+    }
+  });
+
+  app.post("/api/emails", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const body = { ...req.body, userId };
+      if (typeof body.timestamp === "string") {
+        body.timestamp = new Date(body.timestamp);
+      }
+      const parsed = insertEmailSchema.safeParse(body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+      if (parsed.data.folder === "sent" && parsed.data.toEmail) {
+        if (!(req.user as any).emailVerified) {
+          return res.status(403).json({ error: "Please verify your email before sending messages" });
+        }
+        const senderMailbox = (req.user as any).mailboxAddress || req.user!.email;
+        const result = await sendEmail({
+          from: req.user!.displayName,
+          fromEmail: senderMailbox,
+          to: parsed.data.toEmail,
+          subject: parsed.data.subject,
+          html: parsed.data.body,
+          cc: parsed.data.cc || undefined,
+          bcc: parsed.data.bcc || undefined,
+        });
+        if (!result.success) {
+          console.error("Email delivery failed:", result.error);
+        }
+      }
+
+      const email = await storage.createEmail(parsed.data);
+      emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
+      res.status(201).json(email);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to create email" });
+    }
+  });
+
+  app.patch("/api/emails/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const parsed = emailUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid update fields", details: parsed.error.issues });
+      const updated = await storage.updateEmail(req.params.id, userId, parsed.data);
+      if (!updated) return res.status(404).json({ error: "Email not found" });
+      emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
+      res.json(updated);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to update email" });
+    }
+  });
+
+  app.post("/api/emails/bulk", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const parsed = bulkActionSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid bulk action", details: parsed.error.issues });
+      const { ids, action, updates } = parsed.data;
+      if (action === "delete") {
+        const count = await storage.deleteEmails(ids, userId);
+        emailContextIndex.invalidate(userId);
+        invalidateCache(`briefing:${userId}`);
+        return res.json({ deleted: count });
+      }
+      if (action === "update" && updates) {
+        const results = await storage.updateEmails(ids.map(id => ({ id, values: updates })), userId);
+        emailContextIndex.invalidate(userId);
+        invalidateCache(`briefing:${userId}`);
+        return res.json(results);
+      }
+      res.status(400).json({ error: "Invalid action" });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to perform bulk action" });
+    }
+  });
+
+  app.delete("/api/emails/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const deleted = await storage.deleteEmail(req.params.id, userId);
+      if (!deleted) return res.status(404).json({ error: "Email not found" });
+      emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to delete email" });
+    }
+  });
+
+  app.post("/api/ai/process/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const userDisplayName = req.user!.displayName;
+      const result = await processEmail(req.params.id, userId, userDisplayName);
+      if (!result) return res.status(404).json({ error: "Email not found" });
+      invalidateCache(`briefing:${userId}`);
+      res.json(result);
+    } catch (e) {
+      console.error("AI process error:", e);
+      res.status(500).json({ error: "Failed to process email with AI" });
+    }
+  });
+
+  app.post("/api/ai/process-all", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const userDisplayName = req.user!.displayName;
+      const count = await processAllUnprocessed(userId, userDisplayName);
+      const threadCount = await processThreadDigests(userId);
+      invalidateCache(`briefing:${userId}`);
+      res.json({ processed: count, threadsDigested: threadCount });
+    } catch (e) {
+      console.error("AI process-all error:", e);
+      res.status(500).json({ error: "Failed to process emails with AI" });
+    }
+  });
+
+  app.post("/api/ai/draft-reply/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const email = await storage.getEmail(req.params.id, userId);
+      if (!email) return res.status(404).json({ error: "Email not found" });
+      const tone = req.body?.tone as string | undefined;
+      const draft = await draftReply(email, req.user!.displayName, tone, userId);
+      const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: draft });
+      invalidateCache(`briefing:${userId}`);
+      res.json(updated);
+    } catch (e) {
+      console.error("AI draft-reply error:", e);
+      res.status(500).json({ error: "Failed to generate draft reply" });
+    }
+  });
+
+  app.get("/api/ai/briefing", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const cacheKey = `briefing:${userId}`;
+      const cached = getCache<{ briefing: string, agentStats: any[] }>(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
+      const emailContext = await emailContextIndex.getContext(userId);
+      const activities = await storage.getAgentActivity(userId);
+
+      const agentCounts: Record<string, { complete: number; pending: number }> = {};
+      for (const a of activities) {
+        const name = a.agentName || "EOMail Assistant";
+        if (!agentCounts[name]) agentCounts[name] = { complete: 0, pending: 0 };
+        if (a.status === "complete") agentCounts[name].complete++;
+        else if (a.status === "pending") agentCounts[name].pending++;
+      }
+
+      const summaryParts = Object.entries(agentCounts)
+        .filter(([, c]) => c.complete > 0)
+        .map(([name, c]) => `${name}: ${c.complete} tasks completed`);
+      const agentSummary = summaryParts.length > 0 ? summaryParts.join("; ") : undefined;
+
+      const briefing = await generateBriefing(emailContext, agentSummary);
+
+      const agentStats = Object.entries(agentCounts).map(([name, c]) => ({
+        name,
+        completed: c.complete,
+        pending: c.pending,
+      }));
+
+      const result = { briefing, agentStats };
+      setCache(cacheKey, result, 5 * 60 * 1000); // 5 minute cache
+
+      res.json(result);
+    } catch (e) {
+      console.error("AI briefing error:", e);
+      res.status(500).json({ error: "Failed to generate briefing" });
+    }
+  });
+
+  app.get("/api/ai/activity", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const activity = await storage.getAgentActivity(userId);
+      res.json(activity);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch agent activity" });
+    }
+  });
+
+  app.post("/api/ai/command", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { prompt } = req.body;
+      if (!prompt) return res.status(400).json({ error: "prompt is required" });
+      if (typeof prompt !== "string" || prompt.length > 500) return res.status(400).json({ error: "prompt must be a string of 500 characters or less" });
+      const emailContext = await emailContextIndex.getContext(userId);
+      const response = await handleAiCommand(prompt, emailContext);
+      res.json({ response });
+    } catch (e) {
+      console.error("AI command error:", e);
+      res.status(500).json({ error: "Failed to process AI command" });
+    }
+  });
+
+  app.post("/api/ai/chat", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { messages } = req.body;
+      if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ error: "messages array is required" });
+      }
+      if (messages.length > 50) {
+        return res.status(400).json({ error: "Too many messages in conversation" });
+      }
+      const validRoles = new Set(["user", "assistant"]);
+      const validated: ChatMessage[] = [];
+      for (const msg of messages) {
+        if (!msg || typeof msg.content !== "string" || !validRoles.has(msg.role)) {
+          return res.status(400).json({ error: "Each message must have a valid role and content" });
+        }
+        validated.push({ role: msg.role, content: msg.content.slice(0, 2000) });
+      }
+      const emailId = req.body.emailId as string | undefined;
+      const { context: emailContext, count: emailCount } = await emailContextIndex.getContextWithCount(userId);
+      const response = await handleAiChat(validated, emailContext, emailCount);
+
+      // Persist the last user message and assistant response
+      const lastUserMsg = validated[validated.length - 1];
+      if (lastUserMsg) {
+        storage.createChatMessage({ userId, emailId, role: lastUserMsg.role, content: lastUserMsg.content }).catch(() => {});
+      }
+      storage.createChatMessage({ userId, emailId, role: "assistant", content: response }).catch(() => {});
+
+      res.json({ response });
+    } catch (e) {
+      console.error("AI chat error:", e);
+      res.status(500).json({ error: "Failed to process chat message" });
+    }
+  });
+
+  app.get("/api/ai/chat/history", requireAuth, async (req, res) => {
+    try {
+      const emailId = req.query.emailId as string | undefined;
+      const history = await storage.getChatHistory(req.user!.id, emailId);
+      res.json(history);
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to fetch chat history");
+    }
+  });
+
+  app.delete("/api/ai/chat/history", requireAuth, async (req, res) => {
+    try {
+      const emailId = req.query.emailId as string | undefined;
+      await storage.deleteChatHistory(req.user!.id, emailId);
+      res.json({ success: true });
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to delete chat history");
+    }
+  });
+
+  app.post("/api/ai/approve/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const email = await storage.getEmail(req.params.id, userId);
+      if (!email) return res.status(404).json({ error: "Email not found" });
+      if (!email.aiDraftReply) return res.status(400).json({ error: "No draft reply to approve" });
+
+      const now = new Date();
+      const replyBody = `<p>${escapeHtml(email.aiDraftReply).replace(/\n/g, "</p><p>")}</p>`;
+      const replySubject = `Re: ${email.subject}`;
+
+      const senderMailbox = (req.user as any).mailboxAddress || req.user!.email;
+      const mailResult = await sendEmail({
+        from: req.user!.displayName,
+        fromEmail: senderMailbox,
+        to: email.fromEmail,
+        subject: replySubject,
+        html: replyBody,
+      });
+      if (!mailResult.success) {
+        console.error("Reply delivery failed:", mailResult.error);
+      }
+
+      await storage.createEmail({
+        userId,
+        from: req.user!.displayName,
+        fromEmail: req.user!.email,
+        to: email.from,
+        toEmail: email.fromEmail,
+        cc: "",
+        bcc: "",
+        subject: replySubject,
+        body: replyBody,
+        preview: email.aiDraftReply.slice(0, 120),
+        timestamp: now,
+        read: true,
+        starred: false,
+        folder: "sent",
+        labels: [],
+        attachments: 0,
+      });
+
+      const updated = await storage.updateEmail(req.params.id, userId, { aiDraftReply: null });
+      emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
+      res.json({ success: true, email: updated });
+    } catch (e) {
+      console.error("AI approve error:", e);
+      res.status(500).json({ error: "Failed to approve and send" });
+    }
+  });
+
+  app.get("/api/folders", requireAuth, async (req, res) => {
+    try {
+      const folders = await storage.getCustomFolders(req.user!.id);
+      res.json(folders);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch folders" });
+    }
+  });
+
+  const createFolderSchema = z.object({
+    name: z.string().min(1).max(50).trim(),
+    parentId: z.string().nullable().optional(),
+    icon: z.string().max(20).optional().default("folder"),
+    color: z.string().max(20).optional().default("blue"),
+  });
+
+  app.post("/api/folders", requireAuth, async (req, res) => {
+    try {
+      const parsed = createFolderSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+      const { name, parentId, icon, color } = parsed.data;
+
+      const existing = await storage.getCustomFolderByName(req.user!.id, name, parentId || null);
+      if (existing) {
+        return res.json(existing);
+      }
+
+      const folder = await storage.createCustomFolder({
+        userId: req.user!.id,
+        name,
+        parentId: parentId || null,
+        icon,
+        color,
+      });
+      res.status(201).json(folder);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to create folder" });
+    }
+  });
+
+  app.delete("/api/folders/:id", requireAuth, async (req, res) => {
+    try {
+      const deleted = await storage.deleteCustomFolder(req.params.id, req.user!.id);
+      if (!deleted) return res.status(404).json({ error: "Folder not found" });
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to delete folder" });
+    }
+  });
+
+  app.post("/api/ai/auto-organize", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+
+      const activityRecord = await storage.createAgentActivity({
+        userId,
+        agentName: "EOMail Assistant",
+        action: "Auto-organizing inbox into folders",
+        status: "pending",
+        emailId: null,
+        detail: null,
+      });
+
+      const inboxEmails = await storage.getEmails(userId, "inbox");
+      if (inboxEmails.length === 0) {
+        await storage.updateAgentActivity(activityRecord.id, userId, {
+          status: "complete",
+          detail: "No emails in inbox to organize",
+        });
+        return res.json({ success: true, organized: 0, folders: [] });
+      }
+
+      const categoryMap: Record<string, string> = {
+        finance: "Finance",
+        scheduling: "Scheduling",
+        newsletter: "Newsletters",
+        "action-required": "Action Required",
+        social: "Social",
+        notification: "Notifications",
+      };
+
+      const folderStats: Record<string, number> = {};
+      const emailsToCreate: InsertEmail[] = [];
+      const emailUpdates: { id: string, updates: { aiCategory: string, aiUrgency: string, aiSuggestedAction: string, aiProcessed: boolean } }[] = [];
+
+      const emailSignatures = inboxEmails.map(e => `${e.subject}|${e.fromEmail}|${e.timestamp.toISOString()}`);
+      const existingCopies = await storage.findDuplicateEmails(userId, emailSignatures);
+
+      for (const email of inboxEmails) {
+        const dedupKey = `${email.subject}|${email.fromEmail}|${email.timestamp.toISOString()}`;
+        if (existingCopies.has(dedupKey)) {
+          continue;
+        }
+
+        let category = email.aiCategory;
+        if (!category) {
+          try {
+            const classification = await classifyEmail(email.from, email.subject, email.body);
+            category = classification.category;
+            emailUpdates.push({
+              id: email.id,
+              updates: {
+                aiCategory: category,
+                aiUrgency: classification.urgency,
+                aiSuggestedAction: classification.suggestedAction,
+                aiProcessed: true,
+              }
+            });
+          } catch {
+            category = "notification";
+          }
+        }
+
+        const folderName = categoryMap[category] || "Other";
+        const customFolderKey = `custom:${folderName}`;
+
+        let existingFolder = await storage.getCustomFolderByName(userId, folderName, null);
+        if (!existingFolder) {
+          const colorMap: Record<string, string> = {
+            Finance: "emerald",
+            Scheduling: "blue",
+            Newsletters: "purple",
+            "Action Required": "rose",
+            Social: "amber",
+            Notifications: "slate",
+            Other: "gray",
+          };
+          existingFolder = await storage.createCustomFolder({
+            userId,
+            name: folderName,
+            parentId: null,
+            icon: "folder",
+            color: colorMap[folderName] || "blue",
+          });
+        }
+
+        const { id: _id, ...emailWithoutId } = email;
+        emailsToCreate.push({
+          ...emailWithoutId,
+          folder: customFolderKey,
+          aiCategory: email.aiCategory || category,
+        });
+
+        folderStats[folderName] = (folderStats[folderName] || 0) + 1;
+      }
+      
+      if (emailsToCreate.length > 0) {
+        await storage.createEmails(emailsToCreate);
+      }
+
+      if (emailUpdates.length > 0) {
+        await storage.updateEmails(emailUpdates.map(u => ({ id: u.id, values: u.updates })), userId);
+      }
+
+      const organized = emailsToCreate.length;
+      const folderSummary = Object.entries(folderStats)
+        .map(([name, count]) => `${name}: ${count}`)
+        .join(", ");
+
+      await storage.updateAgentActivity(activityRecord.id, userId, {
+        status: "complete",
+        detail: `Organized ${organized} emails into folders — ${folderSummary}`,
+      });
+
+      emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
+      const createdFolders = await storage.getCustomFolders(userId);
+      res.json({ success: true, organized, folders: createdFolders, stats: folderStats });
+    } catch (e) {
+      console.error("Auto-organize error:", e);
+      res.status(500).json({ error: "Failed to auto-organize emails" });
+    }
+  });
+
+  app.post("/api/ai/reject/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+
+      const paramsSchema = z.object({ id: z.string().min(1) });
+      const parsed = paramsSchema.safeParse(req.params);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid email ID" });
+      }
+
+      const updated = await storage.updateEmail(parsed.data.id, userId, { aiDraftReply: null });
+      if (!updated) return res.status(404).json({ error: "Email not found" });
+      emailContextIndex.invalidate(userId);
+      invalidateCache(`briefing:${userId}`);
+      res.json(updated);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to reject draft" });
+    }
+  });
+
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  app.post("/api/email/inbound", async (req, res) => {
+    try {
+      const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
+      if (!webhookSecret) {
+        return res.status(503).json({ error: "Webhook not configured" });
+      }
+      const providedSecret = String(req.headers["x-webhook-secret"] || "");
+      if (
+        providedSecret.length !== webhookSecret.length ||
+        !crypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(webhookSecret))
+      ) {
+        return res.status(401).json({ error: "Unauthorized webhook request" });
+      }
+
+      const { from, from_email, to, subject, html, text: textBody } = req.body;
+      if (!to || !from_email) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const recipients = Array.isArray(to) ? to : [to];
+      let processed = 0;
+
+      for (const recipient of recipients) {
+        const recipientEmail = typeof recipient === "string" ? recipient : recipient.email;
+        if (!recipientEmail) continue;
+
+        const user = await storage.getUserByMailbox(recipientEmail.toLowerCase());
+        if (!user) continue;
+
+        const senderName = typeof from === "string" ? from : (from?.name || from_email);
+        const body = html || `<p>${(textBody || "").replace(/\n/g, "</p><p>")}</p>`;
+        const preview = (textBody || "").slice(0, 120);
+
+        const email = await storage.createEmail({
+          userId: user.id,
+          from: senderName,
+          fromEmail: from_email,
+          to: user.displayName,
+          toEmail: recipientEmail,
+          cc: "",
+          bcc: "",
+          subject: subject || "(no subject)",
+          body,
+          preview,
+          timestamp: new Date(),
+          read: false,
+          starred: false,
+          folder: "inbox",
+          labels: [],
+          attachments: 0,
+        });
+
+        emailContextIndex.invalidate(user.id);
+        invalidateCache(`briefing:${user.id}`);
+        processEmail(email.id, user.id).catch((e) =>
+          console.error("AI triage failed for inbound email:", e)
+        );
+        processed++;
+      }
+
+      res.json({ success: true, processed });
+    } catch (e) {
+      console.error("Inbound webhook error:", e);
+      res.status(500).json({ error: "Failed to process inbound email" });
+    }
+  });
+
+  app.post("/api/ai/expand-draft", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const { notes, recipientName, recipientCompany, relationship } = req.body as {
+        notes: string;
+        recipientName: string;
+        recipientCompany?: string;
+        relationship?: "client" | "colleague" | "vendor" | "unknown";
+      };
+
+      if (!notes || !recipientName) {
+        return res.status(400).json({ error: "notes and recipientName are required" });
+      }
+      if (typeof notes !== "string" || notes.length > 2000) {
+        return res.status(400).json({ error: "notes must be a string of 2000 characters or less" });
+      }
+      if (typeof recipientName !== "string" || recipientName.length > 100) {
+        return res.status(400).json({ error: "recipientName must be a string of 100 characters or less" });
+      }
+
+      const expanded = await expandDraft(
+        notes,
+        recipientName,
+        recipientCompany,
+        user.displayName,
+        relationship || "unknown",
+        user.id
+      );
+
+      res.json({ draft: expanded });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to expand draft" });
+    }
+  });
+
+  app.get("/api/user/preferences", requireAuth, async (req, res) => {
+    try {
+      const prefs = await getUserPreferences(req.user!.id);
+      res.json(prefs);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch preferences" });
+    }
+  });
+
+  const preferencesSchema = z.object({
+    preferred_signature: z.string().max(500).optional(),
+    default_tone: z.enum(["professional", "casual", "formal", "assertive"]).optional(),
+    industry_jargon_toggle: z.boolean().optional(),
+    formality_level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
+  }).strict();
+
+  app.post("/api/user/preferences", requireAuth, async (req, res) => {
+    try {
+      const parsed = preferencesSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid preferences", details: parsed.error.issues });
+      const updated = await setUserPreferences(req.user!.id, parsed.data);
+      res.json(updated);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to update preferences" });
+    }
+  });
+
+  // ─── Phase 2 Routes ─────────────────────────────────────────────────────
+
+  // Financial documents
+  app.get("/api/finance/documents", requireAuth, async (req, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const emailId = req.query.emailId as string | undefined;
+      const docs = await storage.getFinancialDocuments(req.user!.id, { status, emailId });
+      res.json(docs);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch financial documents" });
+    }
+  });
+
+  app.get("/api/finance/documents/:id", requireAuth, async (req, res) => {
+    try {
+      const doc = await storage.getFinancialDocument(req.params.id, req.user!.id);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+      res.json(doc);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch document" });
+    }
+  });
+
+  app.patch("/api/finance/documents/:id", requireAuth, async (req, res) => {
+    try {
+      const parsed = financialDocumentUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid document update");
+      const updated = await storage.updateFinancialDocument(req.params.id, req.user!.id, parsed.data as any);
+      if (!updated) return apiError(res, 404, "NOT_FOUND", "Document not found");
+      res.json(updated);
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to update document");
+    }
+  });
+
+  // Calendar events
+  app.get("/api/calendar/events", requireAuth, async (req, res) => {
+    try {
+      const start = req.query.start ? new Date(req.query.start as string) : undefined;
+      const end = req.query.end ? new Date(req.query.end as string) : undefined;
+      const events = await storage.getCalendarEvents(req.user!.id, start, end);
+      const eventsWithParticipants = await Promise.all(
+        events.map(async (event) => {
+          const participants = await storage.getCalendarParticipants(event.id);
+          return { ...event, participants };
+        })
+      );
+      res.json(eventsWithParticipants);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch calendar events" });
+    }
+  });
+
+  app.get("/api/calendar/events/:id", requireAuth, async (req, res) => {
+    try {
+      const event = await storage.getCalendarEvent(req.params.id, req.user!.id);
+      if (!event) return res.status(404).json({ error: "Event not found" });
+      const participants = await storage.getCalendarParticipants(event.id);
+      res.json({ ...event, participants });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch event" });
+    }
+  });
+
+  app.post("/api/calendar/events", requireAuth, async (req, res) => {
+    try {
+      const parsed = createCalendarEventSchema.safeParse(req.body);
+      if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid event data");
+      const event = await storage.createCalendarEvent({
+        userId: req.user!.id,
+        title: parsed.data.title,
+        description: parsed.data.description,
+        startTime: new Date(parsed.data.startTime),
+        endTime: new Date(parsed.data.endTime),
+        timezone: parsed.data.timezone || "America/New_York",
+        location: parsed.data.location,
+        meetingUrl: parsed.data.meetingUrl,
+        status: parsed.data.status || "pending",
+      });
+      res.status(201).json(event);
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to create event");
+    }
+  });
+
+  app.patch("/api/calendar/events/:id", requireAuth, async (req, res) => {
+    try {
+      const parsed = calendarEventUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid event update");
+      const updates: any = { ...parsed.data };
+      if (updates.startTime) updates.startTime = new Date(updates.startTime);
+      if (updates.endTime) updates.endTime = new Date(updates.endTime);
+      const updated = await storage.updateCalendarEvent(req.params.id, req.user!.id, updates);
+      if (!updated) return apiError(res, 404, "NOT_FOUND", "Event not found");
+      res.json(updated);
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to update event");
+    }
+  });
+
+  app.delete("/api/calendar/events/:id", requireAuth, async (req, res) => {
+    try {
+      const deleted = await storage.deleteCalendarEvent(req.params.id, req.user!.id);
+      if (!deleted) return res.status(404).json({ error: "Event not found" });
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to delete event" });
+    }
+  });
+
+  // Availability slots
+  app.get("/api/calendar/availability", requireAuth, async (req, res) => {
+    try {
+      const slots = await storage.getAvailabilitySlots(req.user!.id);
+      res.json(slots);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch availability" });
+    }
+  });
+
+  app.put("/api/calendar/availability", requireAuth, async (req, res) => {
+    try {
+      const slotsArray = z.array(availabilitySlotSchema).max(50);
+      const parsed = z.object({ slots: slotsArray }).safeParse(req.body);
+      if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid availability slots");
+      const userId = req.user!.id;
+      const typedSlots = parsed.data.slots.map((s) => ({
+        userId,
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        timezone: s.timezone || "America/New_York",
+        isAvailable: s.isAvailable ?? true,
+        priority: s.priority,
+      }));
+      const savedSlots = await storage.setAvailabilitySlots(userId, typedSlots);
+      res.json(savedSlots);
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to save availability");
+    }
+  });
+
+  // Timezone conflicts
+  app.get("/api/calendar/conflicts", requireAuth, async (req, res) => {
+    try {
+      const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
+      const conflicts = await storage.getTimezoneConflicts(req.user!.id, resolved);
+      res.json(conflicts);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch conflicts" });
+    }
+  });
+
+  app.patch("/api/calendar/conflicts/:id", requireAuth, async (req, res) => {
+    try {
+      const parsed = timezoneConflictUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid conflict update");
+      const updated = await storage.updateTimezoneConflict(req.params.id, req.user!.id, parsed.data as any);
+      if (!updated) return apiError(res, 404, "NOT_FOUND", "Conflict not found");
+      res.json(updated);
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to update conflict");
+    }
+  });
+
+  // AI time suggestion
+  app.post("/api/ai/suggest-time", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { durationMinutes, participantTimezones, constraints } = req.body;
+      const slots = await storage.getAvailabilitySlots(userId);
+      const slotsStr = slots.map((s) =>
+        `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][s.dayOfWeek]} ${s.startTime}-${s.endTime} (${s.timezone})`
+      ).join("\n");
+
+      const result = await suggestOptimalTime(
+        slotsStr || "Mon-Fri 09:00-17:00 (America/New_York)",
+        durationMinutes || 60,
+        participantTimezones || [],
+        constraints
+      );
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to suggest time" });
+    }
+  });
+
+  // Thread digests
+  app.post("/api/ai/process-threads", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const count = await processThreadDigests(req.user!.id);
+      res.json({ processed: count });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to process thread digests" });
+    }
+  });
+
+  app.get("/api/threads/:threadId", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const threadEmails = await storage.getEmailThread(req.params.threadId, userId);
+      const summary = await storage.getThreadSummary(req.params.threadId, userId);
+      res.json({ emails: threadEmails, summary });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch thread" });
+    }
+  });
+
+  // Quarantine / Security
+  app.get("/api/security/quarantine", requireAuth, async (req, res) => {
+    try {
+      const actions = await storage.getQuarantineActions(req.user!.id);
+      res.json(actions);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch quarantine actions" });
+    }
+  });
+
+  app.post("/api/security/quarantine/:emailId/release", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { emailId } = req.params;
+      const action = await storage.getQuarantineAction(emailId, userId);
+      if (!action) return res.status(404).json({ error: "Quarantine record not found" });
+
+      await storage.updateQuarantineAction(action.id, userId, {
+        releaseStatus: "released",
+        reviewedAt: new Date(),
+      });
+      await storage.updateEmail(emailId, userId, { folder: "inbox" });
+      emailContextIndex.invalidate(userId);
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to release email" });
+    }
+  });
+
+  app.get("/api/security/scan-logs/:emailId", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const email = await storage.getEmail(req.params.emailId, userId);
+      if (!email) return apiError(res, 404, "NOT_FOUND", "Email not found");
+      const logs = await storage.getThreatScanLogs(req.params.emailId, userId);
+      res.json(logs);
+    } catch (e) {
+      apiError(res, 500, "INTERNAL_ERROR", "Failed to fetch scan logs");
+    }
+  });
+
+  return httpServer;
+}
