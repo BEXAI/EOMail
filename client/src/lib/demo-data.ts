@@ -1,4 +1,4 @@
-import type { Email, AgentActivity, CustomFolder } from "@shared/schema";
+import type { Email, AgentActivity, CustomFolder, FinancialDocument, CalendarEvent, CalendarParticipant, QuarantineAction, EmailThread, TimezoneConflict } from "@shared/schema";
 
 const now = new Date();
 const h = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
@@ -58,6 +58,9 @@ export const DEMO_EMAILS: Email[] = ([
     aiSpamScore: 0,
     aiSpamReason: null,
     aiProcessed: true,
+    threadId: "thread-q1-strategy",
+    threadSubject: "Q1 Strategy Meeting",
+    threadPosition: 1,
     createdAt: h(4),
   },
   {
@@ -114,6 +117,9 @@ export const DEMO_EMAILS: Email[] = ([
     aiSpamScore: 0,
     aiSpamReason: null,
     aiProcessed: true,
+    threadId: "thread-brand-refresh",
+    threadSubject: "Brand refresh",
+    threadPosition: 2,
     createdAt: h(8),
   },
   {
@@ -282,6 +288,9 @@ export const DEMO_EMAILS: Email[] = ([
     aiSpamScore: null,
     aiSpamReason: null,
     aiProcessed: false,
+    threadId: "thread-brand-refresh",
+    threadSubject: "Brand refresh",
+    threadPosition: 1,
     createdAt: h(48),
   },
 ] as unknown as Email[]);
@@ -296,6 +305,9 @@ export const DEMO_COUNTS: Record<string, number> = {
   spam: 0,
   trash: 0,
   all: 10,
+  finops: 2,
+  calendar: 1,
+  security: 0,
 };
 
 export const DEMO_AGENT_ACTIVITY: AgentActivity[] = [
@@ -427,6 +439,111 @@ export const DEMO_USER = {
   mailboxAddress: "demo@eomail.co",
   username: "demo",
 };
+
+export const DEMO_FINANCIAL_DOCUMENTS: FinancialDocument[] = ([
+  {
+    id: "demo-fin-1",
+    userId: "demo",
+    emailId: "demo-1",
+    documentType: "invoice",
+    status: "extracted",
+    vendorName: "Stripe",
+    vendorEmail: "sarah.chen@stripe.com",
+    invoiceNumber: "INV-2024-0892",
+    invoiceDate: h(2),
+    dueDate: new Date(now.getFullYear(), now.getMonth(), 15),
+    currency: "USD",
+    subtotal: "149.00",
+    tax: "0.00",
+    shipping: null,
+    discount: null,
+    total: "149.00",
+    lineItems: [{ description: "EOMail Pro Monthly Subscription", quantity: 1, amount: 149.0 }],
+    paymentStatus: "pending",
+    confidenceScore: 95,
+    rawExtraction: null,
+    confirmedAt: null,
+    createdAt: h(2),
+  },
+  {
+    id: "demo-fin-2",
+    userId: "demo",
+    emailId: "demo-5",
+    documentType: "invoice",
+    status: "extracted",
+    vendorName: "Amazon Web Services",
+    vendorEmail: "no-reply@aws.amazon.com",
+    invoiceNumber: "AWS-2026-02",
+    invoiceDate: h(12),
+    dueDate: new Date(now.getFullYear(), now.getMonth(), 28),
+    currency: "USD",
+    subtotal: "2095.38",
+    tax: "252.44",
+    shipping: null,
+    discount: null,
+    total: "2347.82",
+    lineItems: [
+      { description: "EC2 Instances (m5.xlarge x3)", quantity: 3, amount: 1245.60 },
+      { description: "RDS PostgreSQL (db.r5.large)", quantity: 1, amount: 549.78 },
+      { description: "S3 Storage + Transfer", quantity: 1, amount: 300.00 },
+    ],
+    paymentStatus: "pending",
+    confidenceScore: 91,
+    rawExtraction: null,
+    confirmedAt: null,
+    createdAt: h(12),
+  },
+] as unknown as FinancialDocument[]);
+
+export const DEMO_CALENDAR_EVENTS: (CalendarEvent & { participants?: CalendarParticipant[] })[] = ([
+  {
+    id: "demo-cal-1",
+    userId: "demo",
+    emailId: "demo-2",
+    title: "Q1 Strategy Meeting",
+    description: "Revenue projections, product roadmap, hiring plan, partnership pipeline",
+    startTime: (() => { const d = new Date(); d.setDate(d.getDate() + ((4 - d.getDay() + 7) % 7 || 7)); d.setHours(14, 0, 0, 0); return d; })(),
+    endTime: (() => { const d = new Date(); d.setDate(d.getDate() + ((4 - d.getDay() + 7) % 7 || 7)); d.setHours(15, 30, 0, 0); return d; })(),
+    timezone: "America/Los_Angeles",
+    location: "Conference Room B",
+    meetingUrl: "https://zoom.us/j/1234567890",
+    status: "pending",
+    organizerEmail: "marcus.j@techventures.io",
+    recurrenceRule: null,
+    createdAt: h(4),
+    updatedAt: h(4),
+    participants: [
+      { id: "demo-part-1", eventId: "demo-cal-1", email: "marcus.j@techventures.io", name: "Marcus Johnson", status: "accepted", isOptional: false, createdAt: h(4) },
+      { id: "demo-part-2", eventId: "demo-cal-1", email: "demo@eomail.co", name: "Demo User", status: "pending", isOptional: false, createdAt: h(4) },
+      { id: "demo-part-3", eventId: "demo-cal-1", email: "team@techventures.io", name: "Tech Ventures Team", status: "pending", isOptional: true, createdAt: h(4) },
+    ],
+  },
+] as unknown as (CalendarEvent & { participants?: CalendarParticipant[] })[]);
+
+export const DEMO_QUARANTINE_ACTIONS: QuarantineAction[] = [];
+
+export const DEMO_TIMEZONE_CONFLICTS: TimezoneConflict[] = [];
+
+export const DEMO_THREAD_SUMMARIES: EmailThread[] = ([
+  {
+    id: "thread-brand-refresh",
+    userId: "demo",
+    subject: "Brand refresh",
+    participants: ["Demo User", "Emily Rodriguez"],
+    messageCount: 2,
+    firstMessageDate: h(48),
+    lastMessageDate: h(8),
+    digest: "Discussion about brand refresh project. Kickoff initiated by Demo User, followed by Emily sharing completed mockups with updated logo, colors, typography, and templates for review.",
+    keyPoints: [
+      "Brand refresh project kicked off",
+      "Mockups delivered: logo, color palette, typography, templates",
+      "Designer requests feedback on gradient logo treatment",
+    ],
+    aiProcessed: true,
+    createdAt: h(48),
+    updatedAt: h(8),
+  },
+] as unknown as EmailThread[]);
 
 export function getDemoEmails(folder: string): Email[] {
   if (folder === "all") return DEMO_EMAILS;

@@ -40,6 +40,7 @@ import {
   Zap,
 } from "lucide-react";
 import { LiquidUICard } from "@/components/liquid-ui-card";
+import { ThreadSummaryCard } from "@/components/thread-summary-card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,6 +59,7 @@ interface EmailDetailProps {
   onMove: (id: string, folder: string) => void;
   onArchive: (id: string) => void;
   onCompose?: (prefill: { to: string; subject: string; body: string }) => void;
+  isDemo?: boolean;
 }
 
 const urgencyColors: Record<string, { bg: string; text: string; label: string }> = {
@@ -105,7 +107,7 @@ const threatTypeLabels: Record<string, { label: string; color: string }> = {
   legitimate: { label: "Legitimate", color: "bg-green-600" },
 };
 
-export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onReply, onMarkRead, onMove, onArchive, onCompose }: EmailDetailProps) {
+export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onReply, onMarkRead, onMove, onArchive, onCompose, isDemo }: EmailDetailProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [activeTone, setActiveTone] = useState<string | null>(null);
@@ -444,6 +446,10 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
                 </CollapsibleContent>
               </Card>
             </Collapsible>
+          )}
+
+          {email.threadId && (
+            <ThreadSummaryCard threadId={email.threadId} isDemo={isDemo} />
           )}
 
           <h1 className="text-2xl font-semibold text-foreground mb-4 leading-tight" data-testid="email-subject-detail">

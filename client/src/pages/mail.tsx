@@ -9,6 +9,9 @@ import { ComposeDialog, type ComposeData } from "@/components/compose-dialog";
 import { MorningBriefing } from "@/components/morning-briefing";
 import { AiCommandBar } from "@/components/ai-command-bar";
 import { AiChatPanel } from "@/components/ai-chat-panel";
+import { FinOpsPanel } from "@/components/finops-panel";
+import { ChronoCalendar } from "@/components/chrono-calendar";
+import { AegisSecurityPanel } from "@/components/aegis-security-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   SidebarProvider,
@@ -51,7 +54,12 @@ const FOLDER_LABELS: Record<string, string> = {
   spam: "Spam",
   trash: "Trash",
   all: "All Mail",
+  finops: "FinOps Dashboard",
+  calendar: "Calendar",
+  security: "Security Dashboard",
 };
+
+const VIRTUAL_FOLDERS = new Set(["finops", "calendar", "security"]);
 
 export default function MailPage() {
   const [folder, setFolder] = useState<string>("inbox");
@@ -76,14 +84,16 @@ export default function MailPage() {
   if (search) queryParams.append("search", search);
   if (labelFilter) queryParams.append("label", labelFilter);
 
-  const { data: liveEmails = [], isLoading: liveEmailsLoading } = useQuery<Email[]>({
+  const isVirtualFolder = VIRTUAL_FOLDERS.has(folder);
+
+  const { data: liveEmails = [], isLoading: liveEmailsLoading } = useQuery<Email[]> ({
     queryKey: ["/api/emails", folder, search, labelFilter],
     queryFn: async () => {
       const res = await fetch(`/api/emails?${queryParams}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch emails");
       return res.json();
     },
-    enabled: !!user,
+    enabled: !!user && !isVirtualFolder,
   });
 
   const { data: liveCounts = {} } = useQuery<Record<string, number>>({
@@ -445,7 +455,6 @@ export default function MailPage() {
                     variant="ghost"
                     onClick={handleRefresh}
                     data-testid="button-refresh"
-                    aria-label="Refresh mailbox"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </Button>
@@ -454,7 +463,7 @@ export default function MailPage() {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="icon" variant="ghost" data-testid="button-keyboard-shortcuts" aria-label="Keyboard shortcuts">
+                  <Button size="icon" variant="ghost" data-testid="button-keyboard-shortcuts">
                     <Keyboard className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
@@ -479,7 +488,6 @@ export default function MailPage() {
                     onClick={() => setChatPanelOpen(!chatPanelOpen)}
                     className={cn(chatPanelOpen && "bg-violet-500/10 text-violet-500")}
                     data-testid="button-ai-chat-toggle"
-                    aria-label="Toggle AI Assistant"
                   >
                     <Bot className="w-4 h-4" />
                   </Button>
@@ -511,66 +519,80 @@ export default function MailPage() {
             </div>
           </header>
 
-          <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
-            <div
-              className={cn(
-                "flex flex-col border-r border-border overflow-hidden transition-all",
-                selectedEmail
-                  ? "hidden md:flex md:w-[380px] md:min-w-[280px] md:shrink-0"
-                  : "flex-1 md:w-[380px] md:min-w-[280px] md:shrink-0"
-              )}
-            >
-              <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="font-semibold text-sm text-foreground" data-testid="folder-title">
-                    {headerTitle}
-                  </h2>
-                  {search && (
-                    <span className="text-xs text-muted-foreground">
-                      — {emails.length} result{emails.length !== 1 ? "s" : ""} for "{search}"
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                </div>
-              </div>
-
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+            {isVirtualFolder ? (
               <div className="flex-1 overflow-hidden">
-                <EmailList
-                  emails={emails}
-                  isLoading={emailsLoading}
-                  selectedId={selectedEmail?.id ?? null}
-                  onSelect={handleSelectEmail}
-                  {...emailActions}
-                  onBulkAction={(ids, action) => bulkMutation.mutate({ ids, action })}
-                  folder={folder}
-                  search={search}
-                  labelFilter={labelFilter}
-                />
+                {folder === "finops" && <FinOpsPanel isDemo={isDemoMode} />}
+                {folder === "calendar" && <ChronoCalendar isDemo={isDemoMode} />}
+                {folder === "security" && <AegisSecurityPanel isDemo={isDemoMode} />}
               </div>
-            </div>
+            ) : (
+              <>
+                <div
+                  className={cn(
+                    "flex flex-col border-r border-border overflow-hidden transition-all",
+                    selectedEmail
+                      ? "hidden md:flex md:w-[380px] md:min-w-[280px] md:shrink-0"
+                      : "flex-1"
+                  )}
+                >
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-semibold text-sm text-foreground" data-testid="folder-title">
+                        {headerTitle}
+                      </h2>
+                      {search && (
+                        <span className="text-xs text-muted-foreground">
+                          — {emails.length} result{emails.length !== 1 ? "s" : ""} for "{search}"
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button size="icon" variant="ghost" className="h-7 w-7" data-testid="button-filter">
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
 
-            {selectedEmail && (
-              <div className="flex-1 min-w-0 overflow-hidden">
-                <EmailDetail
-                  email={selectedEmail}
-                  onBack={() => setSelectedEmail(null)}
-                  {...emailActions}
-                  onReply={handleReply}
-                  onCompose={handleComposeWithPrefill}
-                />
-              </div>
-            )}
+                  <div className="flex-1 overflow-hidden">
+                    <EmailList
+                      emails={emails}
+                      isLoading={emailsLoading}
+                      selectedId={selectedEmail?.id ?? null}
+                      onSelect={handleSelectEmail}
+                      {...emailActions}
+                      onBulkAction={(ids, action) => bulkMutation.mutate({ ids, action })}
+                      folder={folder}
+                      search={search}
+                      labelFilter={labelFilter}
+                    />
+                  </div>
+                </div>
 
-            {!selectedEmail && (
-              <div className="flex flex-1 overflow-hidden border-t md:border-t-0 md:border-l border-border h-[40vh] md:h-auto shrink-0 md:shrink">
-                <MorningBriefing
-                  userName={user?.displayName || (isDemoMode ? DEMO_USER.displayName : undefined)}
-                  emails={emails}
-                  onSelectEmail={handleSelectEmail}
-                  isDemo={isDemoMode}
-                />
-              </div>
+                {selectedEmail && (
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <EmailDetail
+                      email={selectedEmail}
+                      onBack={() => setSelectedEmail(null)}
+                      {...emailActions}
+                      onReply={handleReply}
+                      onCompose={handleComposeWithPrefill}
+                      isDemo={isDemoMode}
+                    />
+                  </div>
+                )}
+
+                {!selectedEmail && (
+                  <div className="hidden md:flex flex-1 overflow-hidden">
+                    <MorningBriefing
+                      userName={user?.displayName || (isDemoMode ? DEMO_USER.displayName : undefined)}
+                      emails={emails}
+                      onSelectEmail={handleSelectEmail}
+                      isDemo={isDemoMode}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
         </SidebarInset>

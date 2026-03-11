@@ -168,7 +168,7 @@ function ActiveAgentsSection({ isDemo }: { isDemo?: boolean }) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
-                        <span className={cn("font-medium truncate text-xs", agent.color)}>
+                        <span className={cn("font-medium truncate", agent.color)} style={{ fontSize: "10px" }}>
                           {activity.agentName || "EOMail Assistant"}
                         </span>
                         {activity.status === "complete" && (
@@ -178,7 +178,7 @@ function ActiveAgentsSection({ isDemo }: { isDemo?: boolean }) {
                           <X className="w-2.5 h-2.5 text-red-500 shrink-0" />
                         )}
                       </div>
-                      <span className="text-xs text-muted-foreground leading-tight truncate block mt-0.5">
+                      <span className="text-muted-foreground leading-tight truncate block" style={{ fontSize: "11px" }}>
                         {activity.action}
                       </span>
                     </div>
@@ -473,6 +473,52 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
           </SidebarGroupContent>
         </SidebarGroup>
 
+        <SidebarGroup className="mt-2">
+          <Collapsible defaultOpen>
+            <CollapsibleTrigger className="flex items-center gap-1 px-3 mb-1 w-full group cursor-pointer">
+              <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex-1 text-left">
+                AI Features
+              </span>
+              <ChevronDown className="w-3 h-3 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {([
+                    { id: "finops", label: "FinOps", icon: DollarSign, color: "text-emerald-500", countKey: "finops" },
+                    { id: "calendar", label: "Calendar", icon: Calendar, color: "text-blue-500", countKey: "calendar" },
+                    { id: "security", label: "Security", icon: Shield, color: "text-red-500", countKey: "security" },
+                  ] as const).map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeFolder === item.id && !activeLabel;
+                    const count = counts[item.countKey] || 0;
+                    return (
+                      <SidebarMenuItem key={item.id}>
+                        <SidebarMenuButton
+                          onClick={() => { onLabelFilter(null); onFolderChange(item.id); }}
+                          isActive={isActive}
+                          className={cn(
+                            "rounded-full px-3 py-1.5 cursor-pointer transition-colors",
+                            isActive && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+                          )}
+                          data-testid={`nav-ai-${item.id}`}
+                        >
+                          <Icon className={cn("w-4 h-4 shrink-0", item.color)} />
+                          <span className="flex-1 text-sm">{item.label}</span>
+                          {count > 0 && (
+                            <span className="text-xs font-semibold ml-auto text-muted-foreground">{count}</span>
+                          )}
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
         <CustomFoldersSection
           activeFolder={activeFolder}
           onFolderChange={onFolderChange}
@@ -523,6 +569,7 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
             <span className="text-sm font-medium text-sidebar-foreground truncate">{userName || "My Account"}</span>
             <span className="text-xs text-muted-foreground truncate">{mailboxAddress || userEmail || "me@eomail.co"}</span>
           </div>
+          <Settings className="w-4 h-4 text-muted-foreground shrink-0" />
         </div>
       </SidebarFooter>
     </Sidebar>

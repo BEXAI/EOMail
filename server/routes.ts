@@ -86,7 +86,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/emails/counts", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
-      const counts = await storage.getEmailCounts(userId);
+      const [counts, finDocs, calEvents, quarantine] = await Promise.all([
+        storage.getEmailCounts(userId),
+        storage.getFinancialDocuments(userId, { status: "extracted" }),
+        storage.getCalendarEvents(userId),
+        storage.getQuarantineActions(userId),
+      ]);
+      counts.finops = finDocs.length;
+      counts.calendar = calEvents.length;
+      counts.security = quarantine.filter((q) => q.releaseStatus === "quarantined").length;
       res.json(counts);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch counts" });
@@ -719,7 +727,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/finance/documents", requireAuth, async (req, res) => {
     try {
       const status = req.query.status as string | undefined;
-      const docs = await storage.getFinancialDocuments(req.user!.id, { status });
+      const emailId = req.query.emailId as string | undefined;
+      const docs = await storage.getFinancialDocuments(req.user!.id, { status, emailId });
       res.json(docs);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch financial documents" });
@@ -752,7 +761,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const start = req.query.start ? new Date(req.query.start as string) : undefined;
       const end = req.query.end ? new Date(req.query.end as string) : undefined;
       const events = await storage.getCalendarEvents(req.user!.id, start, end);
-      res.json(events);
+      const eventsWithParticipants = await Promise.all(
+        events.map(async (event) => {
+          const participants = await storage.getCalendarParticipants(event.id);
+          return { ...event, participants };
+        })
+      );
+      res.json(eventsWithParticipants);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch calendar events" });
     }
