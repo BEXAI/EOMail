@@ -72,7 +72,7 @@ export default function ForgotPasswordPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="yourname@eomail.co"
+                    placeholder="your@email.com"
                     required
                     autoFocus
                     data-testid="input-forgot-email"

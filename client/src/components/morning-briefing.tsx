@@ -20,17 +20,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-function escapeHtml(str: string): string {
-  if (!str) return "";
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function formatBriefing(content: string): string {
-  if (!content) return "Process your emails with AI to get your morning briefing.";
-  const escaped = escapeHtml(content);
-  return escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\*(.+?)\*/g, "<em>$1</em>");
-}
-
 interface MorningBriefingProps {
   userName?: string;
   emails: Email[];
@@ -155,11 +144,9 @@ export function MorningBriefing({ userName, emails, onSelectEmail, isDemo }: Mor
                 <Skeleton className="h-4 w-4/6" />
               </div>
             ) : (
-              <p
-                className="text-sm text-foreground/80 leading-relaxed [&_strong]:text-foreground [&_strong]:font-semibold"
-                data-testid="briefing-text"
-                dangerouslySetInnerHTML={{ __html: formatBriefing(briefingData?.briefing || "") }}
-              />
+              <p className="text-sm text-foreground/80 leading-relaxed" data-testid="briefing-text">
+                {briefingData?.briefing || "Process your emails with AI to get your morning briefing."}
+              </p>
             )}
           </CardContent>
         </Card>

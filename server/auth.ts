@@ -88,7 +88,7 @@ export function setupAuth(app: Express) {
       store: new PgSession({
         pool,
         tableName: "session",
-        createTableIfMissing: false,
+        createTableIfMissing: true,
       }),
       secret: process.env.SESSION_SECRET,
       resave: false,
@@ -106,7 +106,8 @@ export function setupAuth(app: Express) {
   app.use(passport.session());
 
   passport.use(
-    new LocalStrategy(async (username, password, done) => {
+    new LocalStrategy(async (rawUsername, password, done) => {
+      const username = rawUsername.trim().toLowerCase();
       try {
         if (isLockedOut(username)) {
           return done(null, false, { message: "Account temporarily locked due to too many failed attempts. Try again later." });
@@ -155,17 +156,30 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
+      const trimmedUsername = username.trim().toLowerCase();
+      const trimmedEmail = email.trim().toLowerCase();
+      const trimmedDisplayName = displayName.trim();
+
+      if (!trimmedUsername || !trimmedEmail || !trimmedDisplayName) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
       if (password.length < 12) {
         return res.status(400).json({ message: "Password must be at least 12 characters" });
       }
 
-      const existing = await storage.getUserByUsername(username);
-      if (existing) {
-        return res.status(400).json({ message: "An account with this username or email already exists" });
+      const existingUsername = await storage.getUserByUsername(trimmedUsername);
+      if (existingUsername) {
+        return res.status(400).json({ message: "An account with this username already exists" });
+      }
+
+      const existingEmail = await storage.getUserByEmail(trimmedEmail);
+      if (existingEmail) {
+        return res.status(400).json({ message: "An account with this email already exists" });
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
-      const initials = displayName
+      const initials = trimmedDisplayName
         .split(" ")
         .map((w: string) => w[0])
         .join("")
@@ -173,31 +187,38 @@ export function setupAuth(app: Express) {
         .slice(0, 2);
 
       const domain = process.env.DOMAIN || "eomail.co";
-      const mailboxAddress = `${username.toLowerCase()}@${domain}`;
+      const mailboxAddress = `${trimmedUsername}@${domain}`;
       const verificationToken = crypto.randomBytes(32).toString("hex");
 
       const user = await storage.createUser({
-        username,
-        email,
+        username: trimmedUsername,
+        email: trimmedEmail,
         password: hashedPassword,
-        displayName,
+        displayName: trimmedDisplayName,
         avatarInitials: initials,
         mailboxAddress,
         verificationToken,
       });
 
-      sendVerificationEmail(email, verificationToken, displayName).catch((e) =>
+      sendVerificationEmail(trimmedEmail, verificationToken, trimmedDisplayName).catch((e) =>
         console.error("Failed to send verification email:", e)
       );
 
       const { password: _, verificationToken: _vt, resetToken: _rt, resetTokenExpiry: _rte, ...safeUser } = user;
-      req.login(safeUser as Express.User, (err) => {
-        if (err) return next(err);
-        res.status(201).json(safeUser);
+      req.session.regenerate((regenerateErr) => {
+        if (regenerateErr) return next(regenerateErr);
+        req.login(safeUser as Express.User, (loginErr) => {
+          if (loginErr) return next(loginErr);
+          res.status(201).json(safeUser);
+        });
       });
     } catch (err: any) {
       if (err.code === "23505") {
-        return res.status(400).json({ message: "Username or email already exists" });
+        const detail = err.detail || "";
+        if (detail.includes("email")) {
+          return res.status(400).json({ message: "An account with this email already exists" });
+        }
+        return res.status(400).json({ message: "An account with this username already exists" });
       }
       next(err);
     }
@@ -209,9 +230,12 @@ export function setupAuth(app: Express) {
       if (!user) {
         return res.status(401).json({ message: info?.message || "Invalid credentials" });
       }
-      req.login(user, (err) => {
-        if (err) return next(err);
-        res.json(user);
+      req.session.regenerate((regenerateErr) => {
+        if (regenerateErr) return next(regenerateErr);
+        req.login(user, (loginErr) => {
+          if (loginErr) return next(loginErr);
+          res.json(user);
+        });
       });
     })(req, res, next);
   });
@@ -236,8 +260,9 @@ export function setupAuth(app: Express) {
 
   app.post("/api/auth/forgot-password", async (req, res) => {
     try {
-      const { email } = req.body;
-      if (!email) return res.status(400).json({ message: "Email is required" });
+      const rawEmail = req.body.email;
+      if (!rawEmail) return res.status(400).json({ message: "Email is required" });
+      const email = rawEmail.trim().toLowerCase();
 
       const user = await storage.getUserByEmail(email);
       if (!user) {
