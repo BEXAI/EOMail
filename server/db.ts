@@ -11,7 +11,7 @@ export const pool = new pg.Pool({
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
-  ...(process.env.NODE_ENV === "production" ? { ssl: true } : {}),
+  ...(process.env.NODE_ENV === "production" ? { ssl: { rejectUnauthorized: false } } : {}),
 });
 
 pool.on("error", (err) => {
