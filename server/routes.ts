@@ -8,9 +8,10 @@ import { insertEmailSchema, type InsertEmail } from "@shared/schema";
 import { requireAuth } from "./auth";
 import { processEmail, processAllUnprocessed, processThreadDigests } from "./ai-pipeline";
 import { draftReply, generateBriefing, handleAiCommand, handleAiChat, classifyEmail, expandDraft, suggestOptimalTime, type ChatMessage } from "./ai";
-import { sendEmail } from "./email";
+import { sendEmail, escapeHtml } from "./email";
 import { getCache, setCache, invalidateCache } from "./cache";
 import { emailContextIndex } from "./ai-context";
+import pLimit from "p-limit";
 import { getUserPreferences, setUserPreferences } from "./system-wrapper/context-manager";
 
 const authLimiter = rateLimit({
@@ -113,16 +114,6 @@ const createCalendarEventSchema = z.object({
   status: z.enum(["pending", "confirmed", "cancelled"]).optional(),
 }).strict();
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-
-}
-
 function apiError(res: any, status: number, code: string, message: string) {
   return res.status(status).json({ error: message, code });
 }
@@ -151,15 +142,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/emails/counts", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
-      const [counts, finDocs, calEvents, quarantine] = await Promise.all([
+      const [counts, finopsCount, calendarCount, securityCount] = await Promise.all([
         storage.getEmailCounts(userId),
-        storage.getFinancialDocuments(userId, { status: "extracted" }),
-        storage.getCalendarEvents(userId),
-        storage.getQuarantineActions(userId),
+        storage.getFinancialDocumentCount(userId, "extracted"),
+        storage.getCalendarEventCount(userId),
+        storage.getQuarantineCount(userId, "quarantined"),
       ]);
-      counts.finops = finDocs.length;
-      counts.calendar = calEvents.length;
-      counts.security = quarantine.filter((q) => q.releaseStatus === "quarantined").length;
+      counts.finops = finopsCount;
+      counts.calendar = calendarCount;
+      counts.security = securityCount;
       res.json(counts);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch counts" });
@@ -576,11 +567,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const emailSignatures = inboxEmails.map(e => `${e.subject}|${e.fromEmail}|${e.timestamp.toISOString()}`);
       const existingCopies = await storage.findDuplicateEmails(userId, emailSignatures);
 
-      for (const email of inboxEmails) {
+      const classifyLimit = pLimit(3);
+      const folderCache = new Map<string, CustomFolder>();
+
+      await Promise.all(inboxEmails.map((email) => classifyLimit(async () => {
         const dedupKey = `${email.subject}|${email.fromEmail}|${email.timestamp.toISOString()}`;
-        if (existingCopies.has(dedupKey)) {
-          continue;
-        }
+        if (existingCopies.has(dedupKey)) return;
 
         let category = email.aiCategory;
         if (!category) {
@@ -604,24 +596,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const folderName = categoryMap[category] || "Other";
         const customFolderKey = `custom:${folderName}`;
 
-        let existingFolder = await storage.getCustomFolderByName(userId, folderName, null);
-        if (!existingFolder) {
-          const colorMap: Record<string, string> = {
-            Finance: "emerald",
-            Scheduling: "blue",
-            Newsletters: "purple",
-            "Action Required": "rose",
-            Social: "amber",
-            Notifications: "slate",
-            Other: "gray",
-          };
-          existingFolder = await storage.createCustomFolder({
-            userId,
-            name: folderName,
-            parentId: null,
-            icon: "folder",
-            color: colorMap[folderName] || "blue",
-          });
+        if (!folderCache.has(folderName)) {
+          let existingFolder = await storage.getCustomFolderByName(userId, folderName, null);
+          if (!existingFolder) {
+            const colorMap: Record<string, string> = {
+              Finance: "emerald",
+              Scheduling: "blue",
+              Newsletters: "purple",
+              "Action Required": "rose",
+              Social: "amber",
+              Notifications: "slate",
+              Other: "gray",
+            };
+            existingFolder = await storage.createCustomFolder({
+              userId,
+              name: folderName,
+              parentId: null,
+              icon: "folder",
+              color: colorMap[folderName] || "blue",
+            });
+          }
+          folderCache.set(folderName, existingFolder);
         }
 
         const { id: _id, ...emailWithoutId } = email;
@@ -632,7 +627,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
 
         folderStats[folderName] = (folderStats[folderName] || 0) + 1;
-      }
+      })));
       
       if (emailsToCreate.length > 0) {
         await storage.createEmails(emailsToCreate);
@@ -857,12 +852,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const start = req.query.start ? new Date(req.query.start as string) : undefined;
       const end = req.query.end ? new Date(req.query.end as string) : undefined;
       const events = await storage.getCalendarEvents(req.user!.id, start, end);
-      const eventsWithParticipants = await Promise.all(
-        events.map(async (event) => {
-          const participants = await storage.getCalendarParticipants(event.id);
-          return { ...event, participants };
-        })
-      );
+      const eventIds = events.map((e) => e.id);
+      const allParticipants = await storage.getCalendarParticipantsByEventIds(eventIds);
+      const participantsByEvent = new Map<string, typeof allParticipants>();
+      for (const p of allParticipants) {
+        const list = participantsByEvent.get(p.eventId) || [];
+        list.push(p);
+        participantsByEvent.set(p.eventId, list);
+      }
+      const eventsWithParticipants = events.map((event) => ({
+        ...event,
+        participants: participantsByEvent.get(event.id) || [],
+      }));
       res.json(eventsWithParticipants);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch calendar events" });

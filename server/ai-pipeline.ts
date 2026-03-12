@@ -249,9 +249,8 @@ export async function processThreadDigests(userId: string): Promise<number> {
 
     for (const email of allEmails) {
       if (!email.threadId) continue;
-      const existing = threadMap.get(email.threadId) || [];
-      existing.push(email);
-      threadMap.set(email.threadId, existing);
+      if (!threadMap.has(email.threadId)) threadMap.set(email.threadId, []);
+      threadMap.get(email.threadId)!.push(email);
     }
 
     let processedCount = 0;

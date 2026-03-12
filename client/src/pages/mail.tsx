@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from "react";
+import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { type Email } from "@shared/schema";
@@ -43,23 +43,14 @@ import {
 import { useEmailActions } from "@/hooks/use-email-actions";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { getDemoEmails, DEMO_COUNTS, DEMO_USER } from "@/lib/demo-data";
-
-const FOLDER_LABELS: Record<string, string> = {
-  inbox: "Inbox",
-  starred: "Starred",
-  sent: "Sent",
-  drafts: "Drafts",
-  "pending-approvals": "Pending Approvals",
-  archive: "Archive",
-  spam: "Spam",
-  trash: "Trash",
-  all: "All Mail",
-  finops: "FinOps Dashboard",
-  calendar: "Calendar",
-  security: "Security Dashboard",
-};
+import { FOLDER_LABELS } from "@/lib/constants";
 
 const VIRTUAL_FOLDERS = new Set(["finops", "calendar", "security"]);
+
+const SIDEBAR_STYLE = {
+  "--sidebar-width": "15rem",
+  "--sidebar-width-icon": "3rem",
+} as React.CSSProperties;
 
 export default function MailPage() {
   const [folder, setFolder] = useState<string>("inbox");
@@ -72,6 +63,9 @@ export default function MailPage() {
   const [searchInput, setSearchInput] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => { if (undoTimer) clearTimeout(undoTimer); };
+  }, [undoTimer]);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -411,11 +405,6 @@ export default function MailPage() {
     setCommandBarOpen,
   });
 
-  const sidebarStyle = {
-    "--sidebar-width": "15rem",
-    "--sidebar-width-icon": "3rem",
-  };
-
   const headerTitle = labelFilter
     ? `Label: ${labelFilter.charAt(0).toUpperCase() + labelFilter.slice(1)}`
     : folder.startsWith("custom:")
@@ -430,16 +419,16 @@ export default function MailPage() {
     return false;
   };
 
-  const emailActions = {
+  const emailActions = useMemo(() => ({
     onStar: (id: string, starred: boolean) => { if (!demoGuard()) starMutation.mutate({ id, starred }); },
     onDelete: (id: string) => { if (!demoGuard()) deleteMutation.mutate(id); },
     onMarkRead: (id: string, read: boolean) => { if (!demoGuard()) markReadMutation.mutate({ id, read }); },
     onMove: (id: string, targetFolder: string) => { if (!demoGuard()) moveMutation.mutate({ id, targetFolder }); },
     onArchive: (id: string) => { if (!demoGuard()) archiveMutation.mutate(id); },
-  };
+  }), [isDemoMode, starMutation, deleteMutation, markReadMutation, moveMutation, archiveMutation]);
 
   return (
-    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+    <SidebarProvider style={SIDEBAR_STYLE}>
       <div className="flex w-full bg-background overflow-hidden h-screen">
         <AppSidebar
           onCompose={handleCompose}
