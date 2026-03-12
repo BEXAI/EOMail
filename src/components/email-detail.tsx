@@ -21,6 +21,8 @@ import {
   Archive,
   Trash2,
   Reply,
+  ReplyAll,
+  Forward,
   MoreVertical,
   Paperclip,
   ChevronDown,
@@ -55,6 +57,8 @@ interface EmailDetailProps {
   onStar: (id: string, starred: boolean) => void;
   onDelete: (id: string) => void;
   onReply: (email: Email) => void;
+  onReplyAll?: (email: Email) => void;
+  onForward?: (email: Email) => void;
   onMarkRead: (id: string, read: boolean) => void;
   onMove: (id: string, folder: string) => void;
   onArchive: (id: string) => void;
@@ -107,7 +111,7 @@ const threatTypeLabels: Record<string, { label: string; color: string }> = {
   legitimate: { label: "Legitimate", color: "bg-green-600" },
 };
 
-export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onReply, onMarkRead, onMove, onArchive, onCompose, isDemo }: EmailDetailProps) {
+export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onReply, onReplyAll, onForward, onMarkRead, onMove, onArchive, onCompose, isDemo }: EmailDetailProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [activeTone, setActiveTone] = useState<string | null>(null);
@@ -494,11 +498,19 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
                   })}
                 </span>
               </div>
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className="text-xs text-muted-foreground">to {email.to}</span>
-                <button className="inline-flex">
-                  <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                </button>
+              <div className="flex flex-col gap-0.5 mt-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">to {email.to}</span>
+                  <button className="inline-flex">
+                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                  </button>
+                </div>
+                {email.cc && (
+                  <span className="text-xs text-muted-foreground">cc: {email.cc}</span>
+                )}
+                {email.bcc && (
+                  <span className="text-xs text-muted-foreground">bcc: {email.bcc}</span>
+                )}
               </div>
             </div>
           </div>
@@ -622,6 +634,28 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
             <Reply className="w-4 h-4" />
             Reply
           </Button>
+          {onReplyAll && (
+            <Button
+              variant="outline"
+              onClick={() => onReplyAll(email)}
+              className="gap-2"
+              data-testid="button-reply-all"
+            >
+              <ReplyAll className="w-4 h-4" />
+              Reply All
+            </Button>
+          )}
+          {onForward && (
+            <Button
+              variant="outline"
+              onClick={() => onForward(email)}
+              className="gap-2"
+              data-testid="button-forward"
+            >
+              <Forward className="w-4 h-4" />
+              Forward
+            </Button>
+          )}
         </div>
       </div>
     </div>

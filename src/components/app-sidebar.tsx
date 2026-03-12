@@ -15,6 +15,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Collapsible,
@@ -55,6 +56,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { useLocation } from "wouter";
 
 interface SidebarProps {
   onCompose: () => void;
@@ -209,6 +211,8 @@ function CustomFoldersSection({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
 
   const { data: liveFolders = [] } = useQuery<CustomFolder[]>({
     queryKey: ["/api/folders"],
@@ -240,6 +244,29 @@ function CustomFoldersSection({
       });
     },
   });
+
+  const createFolderMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/folders", { name });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+      setCreatingFolder(false);
+      setNewFolderName("");
+      toast({ title: "Folder created" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to create folder", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleCreateFolder = () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    createFolderMutation.mutate(name);
+  };
 
   const rootFolders = customFoldersList.filter((f) => !f.parentId);
   const getChildren = (parentId: string) => customFoldersList.filter((f) => f.parentId === parentId);
@@ -402,6 +429,56 @@ function CustomFoldersSection({
                   )}
                   {autoOrganizeMutation.isPending ? "Organizing..." : "Automate Emails Into Folders"}
                 </Button>
+                {creatingFolder ? (
+                  <div className="flex items-center gap-1 mt-1">
+                    <Input
+                      value={newFolderName}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewFolderName(e.target.value)}
+                      placeholder="Folder name"
+                      className="h-7 text-xs"
+                      autoFocus
+                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                        if (e.key === "Enter") handleCreateFolder();
+                        if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
+                      }}
+                      data-testid="input-new-folder"
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0"
+                      onClick={handleCreateFolder}
+                      disabled={createFolderMutation.isPending || !newFolderName.trim()}
+                      data-testid="button-confirm-new-folder"
+                    >
+                      {createFolderMutation.isPending ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Check className="w-3 h-3" />
+                      )}
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0"
+                      onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}
+                      data-testid="button-cancel-new-folder"
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start gap-2 text-xs text-muted-foreground hover:text-foreground mt-0.5"
+                    onClick={() => setCreatingFolder(true)}
+                    data-testid="button-new-folder"
+                  >
+                    <FolderPlus className="w-3.5 h-3.5" />
+                    New Folder
+                  </Button>
+                )}
               </div>
             )}
           </SidebarGroupContent>
@@ -412,6 +489,7 @@ function CustomFoldersSection({
 }
 
 export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, activeLabel, onLabelFilter, userName, userEmail, userInitials, mailboxAddress, isDemo }: SidebarProps) {
+  const [, setLocation] = useLocation();
   return (
     <Sidebar>
       <SidebarHeader className="px-3 pt-4 pb-2">
@@ -569,7 +647,14 @@ export function AppSidebar({ onCompose, counts, activeFolder, onFolderChange, ac
             <span className="text-sm font-medium text-sidebar-foreground truncate">{userName || "My Account"}</span>
             <span className="text-xs text-muted-foreground truncate">{mailboxAddress || userEmail || "me@eomail.co"}</span>
           </div>
-          <Settings className="w-4 h-4 text-muted-foreground shrink-0" />
+          <button
+            onClick={() => setLocation("/settings")}
+            className="p-1 rounded-md hover:bg-sidebar-accent transition-colors"
+            title="Settings"
+            data-testid="button-settings"
+          >
+            <Settings className="w-4 h-4 text-muted-foreground shrink-0" />
+          </button>
         </div>
       </SidebarFooter>
     </Sidebar>

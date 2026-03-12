@@ -23,6 +23,10 @@ import { eq, and, or, ilike, desc, asc, inArray, ne, not, like, sql, isNotNull }
 
 type EmailUpdates = Partial<Pick<Email, "read" | "starred" | "folder" | "labels" | "to" | "toEmail" | "cc" | "bcc" | "subject" | "body" | "preview" | "aiSummary" | "aiCategory" | "aiUrgency" | "aiSuggestedAction" | "aiDraftReply" | "aiSpamScore" | "aiSpamReason" | "aiProcessed" | "threadId" | "threadSubject" | "threadPosition">>;
 
+function escapeIlike(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -177,12 +181,13 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (search) {
+      const escaped = escapeIlike(search);
       conditions.push(
         or(
-          ilike(emails.subject, `%${search}%`),
-          ilike(emails.from, `%${search}%`),
-          ilike(emails.preview, `%${search}%`),
-          ilike(emails.body, `%${search}%`)
+          ilike(emails.subject, `%${escaped}%`),
+          ilike(emails.from, `%${escaped}%`),
+          ilike(emails.preview, `%${escaped}%`),
+          ilike(emails.body, `%${escaped}%`)
         )!
       );
     }

@@ -4,8 +4,10 @@ import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { pool } from "./db";
 
 const app = express();
+app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 declare module "http" {
@@ -58,6 +60,15 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason);
+  process.exit(1);
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -77,14 +88,15 @@ app.use((req, res, next) => {
   const { verifyDatabaseConnection } = await import("./db");
   const dbReady = await verifyDatabaseConnection(5);
   if (!dbReady) {
-    console.error("WARNING: Database is unreachable. Server will start but DB queries will fail.");
+    console.error("FATAL: Database is unreachable after 5 retries. Exiting.");
+    process.exit(1);
   }
 
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const message = status >= 500 ? "Internal Server Error" : (err.message || "Internal Server Error");
 
     console.error("Internal Server Error:", err);
 
@@ -120,4 +132,24 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
     },
   );
+
+  const gracefulShutdown = (signal: string) => {
+    log(`${signal} received. Shutting down gracefully...`);
+    httpServer.close(() => {
+      log("HTTP server closed.");
+      pool.end().then(() => {
+        log("Database pool drained.");
+        process.exit(0);
+      }).catch(() => {
+        process.exit(1);
+      });
+    });
+    setTimeout(() => {
+      console.error("Graceful shutdown timed out. Forcing exit.");
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 })();

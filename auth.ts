@@ -5,6 +5,7 @@ import connectPgSimple from "connect-pg-simple";
 import { type Express } from "express";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
+import { z } from "zod";
 import { storage } from "./storage";
 import { pool } from "./db";
 import { type User } from "@shared/schema";
@@ -20,6 +21,9 @@ declare global {
       avatarInitials: string;
       mailboxAddress: string | null;
       emailVerified: boolean;
+      timezone: string | null;
+      workingHoursStart: string | null;
+      workingHoursEnd: string | null;
       createdAt: Date;
     }
   }
@@ -331,6 +335,87 @@ export function setupAuth(app: Express) {
       res.json({ message: "Verification email sent" });
     } catch (err) {
       console.error("Resend verification error:", err);
+      res.status(500).json({ message: "Something went wrong" });
+    }
+  });
+
+  const updateProfileSchema = z.object({
+    displayName: z.string().min(1).max(100).optional(),
+    timezone: z.string().min(1).max(100).optional(),
+    workingHoursStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    workingHoursEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  }).strict();
+
+  app.patch("/api/auth/user", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Not authenticated" });
+
+      const parsed = updateProfileSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten().fieldErrors });
+      }
+
+      const updates: Partial<User> = {};
+      if (parsed.data.displayName) {
+        updates.displayName = parsed.data.displayName.trim();
+        updates.avatarInitials = updates.displayName
+          .split(" ")
+          .map((w: string) => w[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 2);
+      }
+      if (parsed.data.timezone) {
+        updates.timezone = parsed.data.timezone;
+      }
+      if (parsed.data.workingHoursStart !== undefined) {
+        updates.workingHoursStart = parsed.data.workingHoursStart;
+      }
+      if (parsed.data.workingHoursEnd !== undefined) {
+        updates.workingHoursEnd = parsed.data.workingHoursEnd;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: "No valid fields to update" });
+      }
+
+      const updated = await storage.updateUser(req.user!.id, updates);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+
+      const { password: _, verificationToken: _vt, resetToken: _rt, resetTokenExpiry: _rte, ...safeUser } = updated;
+      res.json(safeUser);
+    } catch (err) {
+      console.error("Update profile error:", err);
+      res.status(500).json({ message: "Something went wrong" });
+    }
+  });
+
+  app.post("/api/auth/change-password", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Not authenticated" });
+
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current password and new password are required" });
+      }
+      if (newPassword.length < 12) {
+        return res.status(400).json({ message: "New password must be at least 12 characters" });
+      }
+
+      const user = await storage.getUser(req.user!.id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(user.id, { password: hashedPassword });
+
+      res.json({ message: "Password changed successfully" });
+    } catch (err) {
+      console.error("Change password error:", err);
       res.status(500).json({ message: "Something went wrong" });
     }
   });

@@ -278,6 +278,42 @@ export default function MailPage() {
     setComposing(true);
   }, []);
 
+  const handleReplyAll = useCallback((email: Email) => {
+    const allRecipients = [email.fromEmail];
+    if (email.cc) {
+      allRecipients.push(...email.cc.split(",").map((e) => e.trim()).filter(Boolean));
+    }
+    const selfEmail = user?.mailboxAddress || user?.email || "";
+    const toList = allRecipients.filter((e) => e.toLowerCase() !== selfEmail.toLowerCase()).join(", ");
+    setReplyTo(null);
+    setComposePrefill({
+      to: toList,
+      subject: `Re: ${email.subject.replace(/^Re: /, "")}`,
+      body: "",
+    });
+    setComposing(true);
+  }, [user]);
+
+  const handleForward = useCallback((email: Email) => {
+    const fwdBody = [
+      "",
+      "---------- Forwarded message ----------",
+      `From: ${email.from} <${email.fromEmail}>`,
+      `Date: ${new Date(email.timestamp).toLocaleString()}`,
+      `Subject: ${email.subject}`,
+      `To: ${email.to}`,
+      "",
+      email.body.replace(/<[^>]+>/g, ""),
+    ].join("\n");
+    setReplyTo(null);
+    setComposePrefill({
+      to: "",
+      subject: `Fwd: ${email.subject.replace(/^Fwd: /, "")}`,
+      body: fwdBody,
+    });
+    setComposing(true);
+  }, []);
+
   const handleRefresh = () => {
     invalidateAll();
     toast({ title: "Refreshed" });
@@ -576,6 +612,8 @@ export default function MailPage() {
                       onBack={() => setSelectedEmail(null)}
                       {...emailActions}
                       onReply={handleReply}
+                      onReplyAll={handleReplyAll}
+                      onForward={handleForward}
                       onCompose={handleComposeWithPrefill}
                       isDemo={isDemoMode}
                     />

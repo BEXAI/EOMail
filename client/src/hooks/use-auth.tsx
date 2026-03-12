@@ -11,6 +11,10 @@ interface AuthUser {
   avatarInitials: string;
   mailboxAddress?: string;
   emailVerified?: boolean;
+  timezone?: string | null;
+  workingHoursStart?: string | null;
+  workingHoursEnd?: string | null;
+  createdAt?: string;
 }
 
 interface AuthContextValue {
