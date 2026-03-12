@@ -129,7 +129,6 @@ function LoginForm({ loginMutation }: { loginMutation: any }) {
 
 function RegisterForm({ registerMutation }: { registerMutation: any }) {
   const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -150,7 +149,6 @@ function RegisterForm({ registerMutation }: { registerMutation: any }) {
 
     registerMutation.mutate({
       username: username.trim().toLowerCase(),
-      email: email.trim().toLowerCase(),
       password,
       displayName: displayName.trim(),
     });
@@ -188,16 +186,10 @@ function RegisterForm({ registerMutation }: { registerMutation: any }) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="register-email">Email</Label>
-            <Input
-              id="register-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
-              required
-              data-testid="input-register-email"
-            />
+            <Label>Your EOMail Address</Label>
+            <div className="flex items-center h-10 px-3 rounded-md border border-input bg-muted text-sm text-muted-foreground">
+              {username ? `${username.trim().toLowerCase()}@eomail.co` : "username@eomail.co"}
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="register-password">Password</Label>

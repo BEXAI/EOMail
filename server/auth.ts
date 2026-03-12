@@ -150,17 +150,16 @@ export function setupAuth(app: Express) {
 
   app.post("/api/auth/register", async (req, res, next) => {
     try {
-      const { username, email, password, displayName } = req.body;
+      const { username, password, displayName } = req.body;
 
-      if (!username || !email || !password || !displayName) {
+      if (!username || !password || !displayName) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
       const trimmedUsername = username.trim().toLowerCase();
-      const trimmedEmail = email.trim().toLowerCase();
       const trimmedDisplayName = displayName.trim();
 
-      if (!trimmedUsername || !trimmedEmail || !trimmedDisplayName) {
+      if (!trimmedUsername || !trimmedDisplayName) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
@@ -173,11 +172,6 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "An account with this username already exists" });
       }
 
-      const existingEmail = await storage.getUserByEmail(trimmedEmail);
-      if (existingEmail) {
-        return res.status(400).json({ message: "An account with this email already exists" });
-      }
-
       const hashedPassword = await bcrypt.hash(password, 10);
       const initials = trimmedDisplayName
         .split(" ")
@@ -187,22 +181,18 @@ export function setupAuth(app: Express) {
         .slice(0, 2);
 
       const domain = process.env.DOMAIN || "eomail.co";
-      const mailboxAddress = `${trimmedUsername}@${domain}`;
-      const verificationToken = crypto.randomBytes(32).toString("hex");
+      const email = `${trimmedUsername}@${domain}`;
+      const mailboxAddress = email;
 
       const user = await storage.createUser({
         username: trimmedUsername,
-        email: trimmedEmail,
+        email,
         password: hashedPassword,
         displayName: trimmedDisplayName,
         avatarInitials: initials,
         mailboxAddress,
-        verificationToken,
+        emailVerified: true,
       });
-
-      sendVerificationEmail(trimmedEmail, verificationToken, trimmedDisplayName).catch((e) =>
-        console.error("Failed to send verification email:", e)
-      );
 
       const { password: _, verificationToken: _vt, resetToken: _rt, resetTokenExpiry: _rte, ...safeUser } = user;
       req.session.regenerate((regenerateErr) => {
@@ -260,22 +250,22 @@ export function setupAuth(app: Express) {
 
   app.post("/api/auth/forgot-password", async (req, res) => {
     try {
-      const rawEmail = req.body.email;
-      if (!rawEmail) return res.status(400).json({ message: "Email is required" });
-      const email = rawEmail.trim().toLowerCase();
+      const rawUsername = req.body.username;
+      if (!rawUsername) return res.status(400).json({ message: "Username is required" });
+      const trimmedUsername = rawUsername.trim().toLowerCase();
 
-      const user = await storage.getUserByEmail(email);
+      const user = await storage.getUserByUsername(trimmedUsername);
       if (!user) {
-        return res.json({ message: "If an account with that email exists, a reset link has been sent." });
+        return res.json({ message: "If an account with that username exists, a reset link has been sent." });
       }
 
       const resetToken = crypto.randomBytes(32).toString("hex");
       const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
 
       await storage.updateUser(user.id, { resetToken, resetTokenExpiry });
-      await sendPasswordResetEmail(email, resetToken, user.displayName);
+      await sendPasswordResetEmail(user.email, resetToken, user.displayName);
 
-      res.json({ message: "If an account with that email exists, a reset link has been sent." });
+      res.json({ message: "If an account with that username exists, a reset link has been sent." });
     } catch (err) {
       console.error("Forgot password error:", err);
       res.status(500).json({ message: "Something went wrong" });

@@ -9,7 +9,7 @@ import { apiRequest } from "@/lib/queryClient";
 import logoPath from "@assets/912AF931-1EA4-4CC4-8976-8C6D0557A5A5_1_105_c_1772859976130.jpeg";
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -19,7 +19,7 @@ export default function ForgotPasswordPage() {
     setError("");
     setIsPending(true);
     try {
-      await apiRequest("POST", "/api/auth/forgot-password", { email });
+      await apiRequest("POST", "/api/auth/forgot-password", { username });
       setSent(true);
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -46,8 +46,8 @@ export default function ForgotPasswordPage() {
             <CardTitle>{sent ? "Check your email" : "Reset your password"}</CardTitle>
             <CardDescription>
               {sent
-                ? "If an account with that email exists, we've sent a reset link."
-                : "Enter your email address and we'll send you a link to reset your password."}
+                ? "If an account with that username exists, we've sent a reset link to your @eomail.co address."
+                : "Enter your username and we'll send a reset link to your @eomail.co address."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -66,16 +66,16 @@ export default function ForgotPasswordPage() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="forgot-email">Email</Label>
+                  <Label htmlFor="forgot-username">Username</Label>
                   <Input
-                    id="forgot-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com"
+                    id="forgot-username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Enter your username"
                     required
                     autoFocus
-                    data-testid="input-forgot-email"
+                    data-testid="input-forgot-username"
                   />
                 </div>
                 {error && (
