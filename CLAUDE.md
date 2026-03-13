@@ -50,7 +50,7 @@ server/index.ts → helmet → json(rawBody) → session → passport → routes
 - **`server/storage.ts`** — Database access layer (DAL) implementing `IStorage` interface for all 12 tables. Single `storage` export used everywhere.
 - **`server/ai-pipeline.ts`** — Core email processing: parallel summarize + classify + spam analysis, then conditional draft reply. Capped at 50 emails/batch with `pLimit(3)`.
 - **`server/system-wrapper/prompt-orchestrator.ts`** — 13 prompt templates (smart_reply, classify, spam_analysis, financial_extraction, meeting_extraction, etc.) returning `PromptResult` with model complexity hints
-- **`server/system-wrapper/api-gateway.ts`** — OpenAI wrapper with retry logic, timeout, PII sanitization via `security.ts`, automatic fallback from gpt-4o to gpt-4o-mini
+- **`server/system-wrapper/api-gateway.ts`** — Anthropic Claude wrapper with retry logic, 30s timeout, PII sanitization via `security.ts`, automatic fallback from claude-opus-4-6 to claude-sonnet-4-5
 - **`server/system-wrapper/context-manager.ts`** — User preference cache (30-min TTL) and thread compression for AI context windows
 - **`server/auth.ts`** — Passport local strategy, bcrypt hashing, deserialized user cache (60s TTL), login attempt rate limiting
 

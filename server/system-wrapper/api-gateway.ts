@@ -108,8 +108,8 @@ async function callClaude(options: ApiCallOptions): Promise<string> {
 
       let content = block.text.trim();
 
-      // For JSON mode: prepend the "{" we used as prefill
-      if (options.jsonMode) {
+      // For JSON mode: prepend the "{" we used as prefill (only if response doesn't already start with it)
+      if (options.jsonMode && !content.startsWith("{")) {
         content = "{" + content;
       }
 
