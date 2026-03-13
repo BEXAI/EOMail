@@ -1,10 +1,10 @@
-import { pgTable, text, varchar, boolean, timestamp, integer, index, jsonb, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, varchar, boolean, timestamp, integer, index, jsonb, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").primaryKey().defaultRandom(),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
@@ -26,8 +26,8 @@ export const users = pgTable("users", {
 ]);
 
 export const emails = pgTable("emails", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   from: text("from").notNull(),
   fromEmail: text("from_email").notNull(),
   to: text("to").notNull(),
@@ -68,12 +68,12 @@ export const emails = pgTable("emails", {
 ]);
 
 export const agentActivity = pgTable("agent_activity", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   agentName: text("agent_name"),
   action: text("action").notNull(),
   status: text("status").notNull().default("pending"),
-  emailId: varchar("email_id"),
+  emailId: uuid("email_id"),
   detail: text("detail"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -81,10 +81,10 @@ export const agentActivity = pgTable("agent_activity", {
 ]);
 
 export const customFolders = pgTable("custom_folders", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  parentId: varchar("parent_id"),
+  parentId: uuid("parent_id"),
   icon: text("icon").default("folder"),
   color: text("color").default("blue"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -114,9 +114,9 @@ export type EmailFolder = "inbox" | "starred" | "sent" | "drafts" | "archive" | 
 // ─── FinOps Autopilot ───────────────────────────────────────────────────────
 
 export const financialDocuments = pgTable("financial_documents", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  emailId: varchar("email_id").notNull().references(() => emails.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emailId: uuid("email_id").notNull().references(() => emails.id, { onDelete: "cascade" }),
   documentType: text("document_type").notNull().default("invoice"),
   status: text("status").notNull().default("extracted"),
   vendorName: text("vendor_name"),
@@ -151,9 +151,9 @@ export type FinancialDocument = typeof financialDocuments.$inferSelect;
 // ─── Chrono Logistics ───────────────────────────────────────────────────────
 
 export const calendarEvents = pgTable("calendar_events", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  emailId: varchar("email_id").references(() => emails.id, { onDelete: "set null" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emailId: uuid("email_id").references(() => emails.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   description: text("description"),
   startTime: timestamp("start_time", { withTimezone: true }).notNull(),
@@ -177,8 +177,8 @@ export type InsertCalendarEvent = z.infer<typeof insertCalendarEventSchema>;
 export type CalendarEvent = typeof calendarEvents.$inferSelect;
 
 export const calendarParticipants = pgTable("calendar_participants", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  eventId: varchar("event_id").notNull().references(() => calendarEvents.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id").notNull().references(() => calendarEvents.id, { onDelete: "cascade" }),
   email: text("email").notNull(),
   name: text("name"),
   status: text("status").notNull().default("pending"),
@@ -193,9 +193,9 @@ export type InsertCalendarParticipant = z.infer<typeof insertCalendarParticipant
 export type CalendarParticipant = typeof calendarParticipants.$inferSelect;
 
 export const timezoneConflicts = pgTable("timezone_conflicts", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  eventId: varchar("event_id").notNull().references(() => calendarEvents.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id").notNull().references(() => calendarEvents.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   conflictType: text("conflict_type").notNull(),
   severity: text("severity").notNull().default("medium"),
   details: text("details"),
@@ -211,8 +211,8 @@ export type InsertTimezoneConflict = z.infer<typeof insertTimezoneConflictSchema
 export type TimezoneConflict = typeof timezoneConflicts.$inferSelect;
 
 export const availabilitySlots = pgTable("availability_slots", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   dayOfWeek: integer("day_of_week").notNull(),
   startTime: text("start_time").notNull(),
   endTime: text("end_time").notNull(),
@@ -231,9 +231,9 @@ export type AvailabilitySlot = typeof availabilitySlots.$inferSelect;
 // ─── Aegis Security ─────────────────────────────────────────────────────────
 
 export const quarantineActions = pgTable("quarantine_actions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  emailId: varchar("email_id").notNull().references(() => emails.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emailId: uuid("email_id").notNull().references(() => emails.id, { onDelete: "cascade" }),
   threatScore: integer("threat_score").notNull(),
   threatType: text("threat_type").notNull(),
   quarantineReason: text("quarantine_reason"),
@@ -256,9 +256,9 @@ export type InsertQuarantineAction = z.infer<typeof insertQuarantineActionSchema
 export type QuarantineAction = typeof quarantineActions.$inferSelect;
 
 export const threatScanLogs = pgTable("threat_scan_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  emailId: varchar("email_id").notNull().references(() => emails.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emailId: uuid("email_id").notNull().references(() => emails.id, { onDelete: "cascade" }),
   scanType: text("scan_type").notNull().default("inbound"),
   threatLevel: text("threat_level").notNull(),
   scanDuration: integer("scan_duration"),
@@ -279,7 +279,7 @@ export type ThreatScanLog = typeof threatScanLogs.$inferSelect;
 
 export const emailThreads = pgTable("email_threads", {
   id: varchar("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   subject: text("subject").notNull(),
   participants: text("participants").array().notNull().default(sql`ARRAY[]::text[]`),
   messageCount: integer("message_count").notNull().default(0),
@@ -302,8 +302,8 @@ export type EmailThread = typeof emailThreads.$inferSelect;
 // ─── User Preferences ──────────────────────────────────────────────────────
 
 export const userPreferences = pgTable("user_preferences", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
   preferredSignature: text("preferred_signature").default(""),
   defaultTone: text("default_tone").default("professional"),
   industryJargonToggle: boolean("industry_jargon_toggle").default(false),
@@ -321,9 +321,9 @@ export type UserPreferencesRow = typeof userPreferences.$inferSelect;
 // ─── AI Chat History ────────────────────────────────────────────────────────
 
 export const aiChatHistory = pgTable("ai_chat_history", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  emailId: varchar("email_id").references(() => emails.id, { onDelete: "set null" }),
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emailId: uuid("email_id").references(() => emails.id, { onDelete: "set null" }),
   role: text("role").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
