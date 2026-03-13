@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { type Email } from "@shared/schema";
@@ -25,7 +25,6 @@ import {
   Search,
   RefreshCw,
   X,
-  SlidersHorizontal,
   Keyboard,
   Bot,
   LogIn,
@@ -71,7 +70,7 @@ export default function MailPage() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
-  const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -80,6 +79,12 @@ export default function MailPage() {
   const demoData = useDemoData(isDemoMode);
   const [, setLocation] = useLocation();
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
 
   const queryParams = new URLSearchParams({ folder });
   if (search) queryParams.append("search", search);
@@ -107,12 +112,16 @@ export default function MailPage() {
   const emailsLoading = isDemoMode ? false : liveEmailsLoading;
   const counts = isDemoMode ? (demoData?.DEMO_COUNTS ?? {}) : liveCounts;
 
-  const invalidateAll = useCallback(() => {
+  const invalidateEmails = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
     queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+  }, [queryClient]);
+
+  const invalidateAll = useCallback(() => {
+    invalidateEmails();
     queryClient.invalidateQueries({ queryKey: ["/api/ai/activity"] });
     queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
-  }, [queryClient]);
+  }, [queryClient, invalidateEmails]);
 
   const closeCompose = useCallback(() => {
     setComposing(false);
@@ -159,7 +168,7 @@ export default function MailPage() {
       }
     },
     onSuccess: () => {
-      invalidateAll();
+      invalidateEmails();
       toast({ title: "Email sent", description: "Your message has been sent successfully." });
     },
     onError: () => {
@@ -202,7 +211,7 @@ export default function MailPage() {
       }
     },
     onSuccess: () => {
-      invalidateAll();
+      invalidateEmails();
       toast({ title: "Draft saved" });
     },
     onError: () => {
@@ -227,7 +236,7 @@ export default function MailPage() {
       }
     },
     onSuccess: (_, { action }) => {
-      invalidateAll();
+      invalidateEmails();
       setSelectedEmail(null);
       const messages: Record<string, string> = {
         delete: folder === "trash" ? "Emails deleted permanently" : "Moved to trash",
@@ -329,7 +338,7 @@ export default function MailPage() {
       await apiRequest("DELETE", `/api/emails/${draftId}`);
     },
     onSuccess: () => {
-      invalidateAll();
+      invalidateEmails();
       toast({ title: "Draft discarded" });
     },
     onError: () => { toast({ title: "Failed to discard draft", variant: "destructive" }); },
@@ -361,8 +370,8 @@ export default function MailPage() {
           variant="outline"
           size="sm"
           onClick={() => {
-            if (undoTimer) clearTimeout(undoTimer);
-            setUndoTimer(null);
+            if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+            undoTimerRef.current = null;
             dismiss();
             setComposing(true);
             toast({ title: "Send cancelled" });
@@ -377,11 +386,11 @@ export default function MailPage() {
 
     const timer = setTimeout(() => {
       sendMutation.mutate({ ...data, draftId: currentDraftId });
-      setUndoTimer(null);
+      undoTimerRef.current = null;
       closeCompose();
     }, 5000);
 
-    setUndoTimer(timer);
+    undoTimerRef.current = timer;
   };
 
   const handleCompose = useCallback(() => {
@@ -584,11 +593,7 @@ export default function MailPage() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" data-testid="button-filter">
-                        <SlidersHorizontal className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
+                    <div className="flex items-center gap-1" />
                   </div>
 
                   <div className="flex-1 overflow-hidden">

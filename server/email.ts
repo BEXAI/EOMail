@@ -1,10 +1,10 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const DOMAIN = process.env.DOMAIN || "eomail.co";
 
-export function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 export async function sendEmail(opts: {
@@ -16,6 +16,9 @@ export async function sendEmail(opts: {
   cc?: string;
   bcc?: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!resend) {
+    return { success: false, error: "RESEND_API_KEY not configured" };
+  }
   try {
     const fromAddress = opts.fromEmail.endsWith(`@${DOMAIN}`)
       ? `${opts.from} <${opts.fromEmail}>`

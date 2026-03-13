@@ -60,15 +60,15 @@ export function registerEmailRoutes(app: Express): void {
   app.get("/api/emails/counts", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
-      const [counts, finDocs, calEvents, quarantine] = await Promise.all([
+      const [counts, finopsCount, calendarCount, securityCount] = await Promise.all([
         storage.getEmailCounts(userId),
-        storage.getFinancialDocuments(userId, { status: "extracted" }),
-        storage.getCalendarEvents(userId),
-        storage.getQuarantineActions(userId),
+        storage.getFinancialDocumentCount(userId, "extracted"),
+        storage.getCalendarEventCount(userId),
+        storage.getQuarantineActionCount(userId, "quarantined"),
       ]);
-      counts.finops = finDocs.length;
-      counts.calendar = calEvents.length;
-      counts.security = quarantine.filter((q) => q.releaseStatus === "quarantined").length;
+      counts.finops = finopsCount;
+      counts.calendar = calendarCount;
+      counts.security = securityCount;
       res.json(counts);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch counts" });
@@ -206,7 +206,12 @@ export function registerEmailRoutes(app: Express): void {
         if (!user) continue;
 
         const senderName = typeof from === "string" ? from : (from?.name || from_email);
-        const body = html || `<p>${(textBody || "").replace(/\n/g, "</p><p>")}</p>`;
+        const safeText = (textBody || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+        const body = html || `<p>${safeText.replace(/\n/g, "</p><p>")}</p>`;
         const preview = (textBody || "").slice(0, 120);
 
         const email = await storage.createEmail({

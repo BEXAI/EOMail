@@ -75,6 +75,7 @@ export interface IStorage {
   updateCalendarEvent(id: string, userId: string, updates: Partial<CalendarEvent>): Promise<CalendarEvent | undefined>;
   deleteCalendarEvent(id: string, userId: string): Promise<boolean>;
   getCalendarParticipants(eventId: string): Promise<CalendarParticipant[]>;
+  getCalendarParticipantsByEventIds(eventIds: string[]): Promise<Map<string, CalendarParticipant[]>>;
   createCalendarParticipant(data: InsertCalendarParticipant): Promise<CalendarParticipant>;
   createCalendarParticipantsBatch(data: InsertCalendarParticipant[]): Promise<CalendarParticipant[]>;
   getTimezoneConflicts(userId: string, resolved?: boolean): Promise<TimezoneConflict[]>;
@@ -315,7 +316,8 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(emails)
       .where(and(eq(emails.userId, userId), eq(emails.aiProcessed, false)))
-      .orderBy(desc(emails.timestamp));
+      .orderBy(desc(emails.timestamp))
+      .limit(50);
   }
 
   async getAgentActivity(userId: string): Promise<AgentActivity[]> {
@@ -479,6 +481,19 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(calendarParticipants).where(eq(calendarParticipants.eventId, eventId));
   }
 
+  async getCalendarParticipantsByEventIds(eventIds: string[]): Promise<Map<string, CalendarParticipant[]>> {
+    if (eventIds.length === 0) return new Map();
+    const rows = await db.select().from(calendarParticipants)
+      .where(inArray(calendarParticipants.eventId, eventIds));
+    const map = new Map<string, CalendarParticipant[]>();
+    for (const row of rows) {
+      const list = map.get(row.eventId) || [];
+      list.push(row);
+      map.set(row.eventId, list);
+    }
+    return map;
+  }
+
   async createCalendarParticipant(data: InsertCalendarParticipant): Promise<CalendarParticipant> {
     const [p] = await db.insert(calendarParticipants).values(data).returning();
     return p;
@@ -518,9 +533,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setAvailabilitySlots(userId: string, slots: InsertAvailabilitySlot[]): Promise<AvailabilitySlot[]> {
-    await db.delete(availabilitySlots).where(eq(availabilitySlots.userId, userId));
-    if (slots.length === 0) return [];
-    return db.insert(availabilitySlots).values(slots).returning();
+    return db.transaction(async (tx) => {
+      await tx.delete(availabilitySlots).where(eq(availabilitySlots.userId, userId));
+      if (slots.length === 0) return [];
+      return tx.insert(availabilitySlots).values(slots).returning();
+    });
   }
 
   // ─── Quarantine ─────────────────────────────────────────────────────────────
@@ -560,6 +577,28 @@ export class DatabaseStorage implements IStorage {
     return log;
   }
 
+  async getFinancialDocumentCount(userId: string, status?: string): Promise<number> {
+    const conditions = [eq(financialDocuments.userId, userId)];
+    if (status) conditions.push(eq(financialDocuments.status, status));
+    const [result] = await db.select({ count: sql<number>`count(*)` })
+      .from(financialDocuments).where(and(...conditions));
+    return Number(result.count);
+  }
+
+  async getCalendarEventCount(userId: string): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` })
+      .from(calendarEvents).where(eq(calendarEvents.userId, userId));
+    return Number(result.count);
+  }
+
+  async getQuarantineActionCount(userId: string, releaseStatus?: string): Promise<number> {
+    const conditions = [eq(quarantineActions.userId, userId)];
+    if (releaseStatus) conditions.push(eq(quarantineActions.releaseStatus, releaseStatus));
+    const [result] = await db.select({ count: sql<number>`count(*)` })
+      .from(quarantineActions).where(and(...conditions));
+    return Number(result.count);
+  }
+
   // ─── Threads ────────────────────────────────────────────────────────────────
 
   async getEmailThread(threadId: string, userId: string): Promise<Email[]> {
@@ -569,16 +608,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrCreateEmailThread(threadId: string, userId: string, data: InsertEmailThread): Promise<EmailThread> {
-    const [existing] = await db.select().from(emailThreads)
-      .where(and(eq(emailThreads.id, threadId), eq(emailThreads.userId, userId))).limit(1);
-    if (existing) {
-      const [updated] = await db.update(emailThreads)
-        .set({ messageCount: data.messageCount, lastMessageDate: data.lastMessageDate, updatedAt: new Date() })
-        .where(eq(emailThreads.id, threadId)).returning();
-      return updated;
-    }
-    const [thread] = await db.insert(emailThreads).values(data).returning();
-    return thread;
+    return db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(emailThreads)
+        .where(and(eq(emailThreads.id, threadId), eq(emailThreads.userId, userId))).limit(1);
+      if (existing) {
+        const [updated] = await tx.update(emailThreads)
+          .set({ messageCount: data.messageCount, lastMessageDate: data.lastMessageDate, updatedAt: new Date() })
+          .where(eq(emailThreads.id, threadId)).returning();
+        return updated;
+      }
+      const [thread] = await tx.insert(emailThreads).values(data).returning();
+      return thread;
+    });
   }
 
   async getThreadSummary(threadId: string, userId: string): Promise<EmailThread | undefined> {

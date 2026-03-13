@@ -47,12 +47,11 @@ export function registerCalendarRoutes(app: Express): void {
       const start = req.query.start ? new Date(req.query.start as string) : undefined;
       const end = req.query.end ? new Date(req.query.end as string) : undefined;
       const events = await storage.getCalendarEvents(req.user!.id, start, end);
-      const eventsWithParticipants = await Promise.all(
-        events.map(async (event) => {
-          const participants = await storage.getCalendarParticipants(event.id);
-          return { ...event, participants };
-        })
-      );
+      const participantsMap = await storage.getCalendarParticipantsByEventIds(events.map(e => e.id));
+      const eventsWithParticipants = events.map((event) => ({
+        ...event,
+        participants: participantsMap.get(event.id) || [],
+      }));
       res.json(eventsWithParticipants);
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch calendar events" });

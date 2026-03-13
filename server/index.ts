@@ -66,7 +66,6 @@ process.on("uncaughtException", (err) => {
 });
 process.on("unhandledRejection", (reason) => {
   console.error("UNHANDLED REJECTION:", reason);
-  process.exit(1);
 });
 
 app.use((req, res, next) => {

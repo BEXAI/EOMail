@@ -64,7 +64,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
     queryKey: ["/api/ai/chat/history", emailId],
     queryFn: async () => {
       const url = emailId ? `/api/ai/chat/history?emailId=${emailId}` : "/api/ai/chat/history";
-      const res = await fetch(url);
+      const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch history");
       return res.json();
     },
