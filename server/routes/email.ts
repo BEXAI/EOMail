@@ -1,11 +1,11 @@
 import type { Express } from "express";
-import crypto from "crypto";
 import { z } from "zod";
 import { storage } from "../storage";
 import { insertEmailSchema } from "@shared/schema";
 import { requireAuth } from "../auth";
 import { processEmail } from "../ai-pipeline";
 import { sendEmail } from "../email";
+import { resend } from "../resend-client";
 import { emailContextIndex } from "../ai-context";
 import { invalidateCache } from "../cache";
 
@@ -176,52 +176,100 @@ export function registerEmailRoutes(app: Express): void {
     }
   });
 
+  // Resend inbound email webhook — uses Svix signature verification
   app.post("/api/email/inbound", async (req, res) => {
     try {
       const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
-      if (!webhookSecret) {
+      if (!webhookSecret || !resend) {
+        console.error("Inbound webhook: RESEND_WEBHOOK_SECRET or RESEND_API_KEY not configured");
         return res.status(503).json({ error: "Webhook not configured" });
       }
-      const providedSecret = String(req.headers["x-webhook-secret"] || "");
-      if (
-        providedSecret.length !== webhookSecret.length ||
-        !crypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(webhookSecret))
-      ) {
-        return res.status(401).json({ error: "Unauthorized webhook request" });
+
+      // Svix verification requires raw body as string
+      const rawBody = typeof req.rawBody === "string"
+        ? req.rawBody
+        : Buffer.isBuffer(req.rawBody)
+          ? (req.rawBody as Buffer).toString()
+          : JSON.stringify(req.body);
+
+      const svixId = req.headers["svix-id"] as string | undefined;
+      const svixTimestamp = req.headers["svix-timestamp"] as string | undefined;
+      const svixSignature = req.headers["svix-signature"] as string | undefined;
+
+      if (!svixId || !svixTimestamp || !svixSignature) {
+        console.error("Inbound webhook: Missing Svix headers");
+        return res.status(401).json({ error: "Missing webhook signature headers" });
       }
 
-      const { from, from_email, to, subject, html, text: textBody } = req.body;
-      if (!to || !from_email) {
-        return res.status(400).json({ error: "Missing required fields" });
+      let event;
+      try {
+        event = resend.webhooks.verify({
+          payload: rawBody,
+          headers: {
+            id: svixId,
+            timestamp: svixTimestamp,
+            signature: svixSignature,
+          },
+          webhookSecret,
+        });
+      } catch (verifyErr) {
+        console.error("Inbound webhook: Signature verification failed:", verifyErr);
+        return res.status(401).json({ error: "Invalid webhook signature" });
       }
 
-      const recipients = Array.isArray(to) ? to : [to];
+      // Only process email.received events
+      if (event.type !== "email.received") {
+        return res.json({ success: true, skipped: true, type: event.type });
+      }
+
+      const { email_id, to: toAddresses, from: senderRaw, subject, cc, bcc } = event.data as {
+        email_id: string;
+        to: string[];
+        from: string;
+        subject: string;
+        cc: string[];
+        bcc: string[];
+      };
+
+      // Fetch full email content (html, text) via Resend API
+      const { data: fullEmail, error: fetchError } = await resend.emails.receiving.get(email_id);
+      if (fetchError || !fullEmail) {
+        console.error("Inbound webhook: Failed to fetch email content:", fetchError);
+        return res.status(200).json({ success: false, error: "Failed to fetch email content" });
+      }
+
+      // Parse sender: "Name <email@domain.com>" or just "email@domain.com"
+      const senderStr = fullEmail.from || senderRaw || "";
+      const senderMatch = senderStr.match(/^(.+?)\s*<(.+)>$/);
+      const senderName = senderMatch ? senderMatch[1].trim() : senderStr;
+      const senderEmail = senderMatch ? senderMatch[2].trim() : senderStr;
+
+      // Build body from html or escaped text
+      const safeText = (fullEmail.text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+      const body = fullEmail.html || `<p>${safeText.replace(/\n/g, "</p><p>")}</p>`;
+      const preview = (fullEmail.text || "").slice(0, 120);
+
       let processed = 0;
+      const recipients = toAddresses || [];
 
-      for (const recipient of recipients) {
-        const recipientEmail = typeof recipient === "string" ? recipient : recipient.email;
+      for (const recipientEmail of recipients) {
         if (!recipientEmail) continue;
 
         const user = await storage.getUserByMailbox(recipientEmail.toLowerCase());
         if (!user) continue;
 
-        const senderName = typeof from === "string" ? from : (from?.name || from_email);
-        const safeText = (textBody || "")
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;");
-        const body = html || `<p>${safeText.replace(/\n/g, "</p><p>")}</p>`;
-        const preview = (textBody || "").slice(0, 120);
-
         const email = await storage.createEmail({
           userId: user.id,
           from: senderName,
-          fromEmail: from_email,
+          fromEmail: senderEmail,
           to: user.displayName,
           toEmail: recipientEmail,
-          cc: "",
-          bcc: "",
+          cc: (cc || []).join(", "),
+          bcc: (bcc || []).join(", "),
           subject: subject || "(no subject)",
           body,
           preview,
@@ -230,7 +278,7 @@ export function registerEmailRoutes(app: Express): void {
           starred: false,
           folder: "inbox",
           labels: [],
-          attachments: 0,
+          attachments: fullEmail.attachments?.length || 0,
         });
 
         emailContextIndex.invalidate(user.id);
@@ -241,10 +289,12 @@ export function registerEmailRoutes(app: Express): void {
         processed++;
       }
 
+      console.log(`Inbound webhook: processed ${processed} recipients for email ${email_id}`);
       res.json({ success: true, processed });
     } catch (e) {
       console.error("Inbound webhook error:", e);
-      res.status(500).json({ error: "Failed to process inbound email" });
+      // Return 200 to prevent Resend retries for unexpected errors
+      res.status(200).json({ success: false, error: "Internal processing error" });
     }
   });
 }

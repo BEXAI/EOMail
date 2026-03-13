@@ -15,6 +15,7 @@ export const apiLimiter = rateLimit({
   message: { error: "Too many requests, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === "/email/inbound",
 });
 
 export const aiLimiter = rateLimit({

@@ -1,6 +1,5 @@
-import { Resend } from "resend";
+import { resend } from "./resend-client";
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const DOMAIN = process.env.DOMAIN || "eomail.co";
 
 function escapeHtml(str: string): string {
