@@ -60,10 +60,12 @@ async function run() {
     ];
 
     for (const table of tablesToFix) {
+      // Check id column type — email_threads intentionally uses varchar for hex hash IDs
+      const checkCol = table === "email_threads" ? "user_id" : "id";
       const check = await client.query(`
         SELECT data_type FROM information_schema.columns
-        WHERE table_name = $1 AND column_name = 'user_id'
-      `, [table]);
+        WHERE table_name = $1 AND column_name = $2
+      `, [table, checkCol]);
 
       if (check.rows.length > 0 && check.rows[0].data_type === 'character varying') {
         // Check if table is empty before dropping
