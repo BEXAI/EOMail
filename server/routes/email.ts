@@ -1,13 +1,15 @@
 import type { Express } from "express";
 import { z } from "zod";
 import { storage } from "../storage";
-import { insertEmailSchema } from "@shared/schema";
+import { insertEmailSchema, emails } from "@shared/schema";
 import { requireAuth } from "../auth";
 import { processEmail } from "../ai-pipeline";
 import { sendEmail } from "../email";
 import { resend } from "../resend-client";
 import { emailContextIndex } from "../ai-context";
 import { invalidateCache } from "../cache";
+import { db } from "../db";
+import { eq, and, sql } from "drizzle-orm";
 
 const VALID_FOLDERS = ["inbox", "starred", "sent", "drafts", "archive", "spam", "trash", "quarantine"];
 const folderSchema = z.string().refine(
@@ -173,6 +175,23 @@ export function registerEmailRoutes(app: Express): void {
       res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: "Failed to delete email" });
+    }
+  });
+
+  app.get("/api/emails/unread-count", requireAuth, async (req, res) => {
+    try {
+      const [result] = await db
+        .select({ count: sql<number>`cast(count(*) as integer)` })
+        .from(emails)
+        .where(and(
+          eq(emails.userId, req.user!.id),
+          eq(emails.read, false),
+          eq(emails.folder, "inbox")
+        ));
+      res.json({ count: result?.count || 0 });
+    } catch (error) {
+      console.error("[Unread Count Error]", error);
+      res.status(500).json({ error: "Failed to count unread emails" });
     }
   });
 
