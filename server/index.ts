@@ -106,7 +106,7 @@ app.use((req, res, next) => {
 
   // Warn about missing optional env vars (non-fatal)
   const envWarnings: string[] = [];
-  if (!process.env.OPENAI_API_KEY) envWarnings.push("OPENAI_API_KEY — AI features will not work");
+  if (!process.env.ANTHROPIC_API_KEY) envWarnings.push("ANTHROPIC_API_KEY — AI features will not work");
   if (!process.env.RESEND_API_KEY) envWarnings.push("RESEND_API_KEY — Email sending will not work");
   if (!process.env.RESEND_WEBHOOK_SECRET) envWarnings.push("RESEND_WEBHOOK_SECRET — Inbound email webhooks disabled");
   if (envWarnings.length > 0) {

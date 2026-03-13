@@ -2,7 +2,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { type Email } from "@shared/schema";
-import { FOLDER_LABELS } from "@/lib/constants";
+
+const FOLDER_LABELS: Record<string, string> = {
+  inbox: "Inbox",
+  starred: "Starred",
+  sent: "Sent",
+  drafts: "Drafts",
+  "pending-approvals": "Pending Approvals",
+  archive: "Archive",
+  spam: "Spam",
+  trash: "Trash",
+  all: "All Mail",
+};
 
 export function useEmailActions(
   selectedEmail: Email | null,

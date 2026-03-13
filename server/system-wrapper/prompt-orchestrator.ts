@@ -87,6 +87,26 @@ Do NOT use bullet points, headers, or formatting. Plain prose only.`,
   };
 }
 
+export interface ThreadSummarizerInputs {
+  email_thread_context: string;
+}
+
+export function buildThreadSummarizerPrompt(
+  inputs: ThreadSummarizerInputs
+): PromptResult {
+  return {
+    taskType: "thread_summarizer",
+    complexity: "simple",
+    temperature: 0.2,
+    maxTokens: 300,
+    systemPrompt: `You are an expert at extracting structured insights from email threads.
+Extract the core decisions, action items, and pending questions.
+Output as a concise bulleted list with clear section headers: Decisions, Action Items, Open Questions.
+Be specific — include names, dates, and amounts when mentioned.`,
+    userPrompt: `Summarize this email thread:\n\n${inputs.email_thread_context}`,
+  };
+}
+
 export interface DraftExpanderInputs {
   shorthand_notes: string;
   recipient_metadata: {
@@ -211,13 +231,13 @@ export function buildMorningBriefingPrompt(
     complexity: "complex",
     temperature: 0.6,
     maxTokens: 400,
-    systemPrompt: `You are EOMail's Chief of Staff AI, delivering a personalized morning briefing to ${inputs.user_name}.
-Your mission: shift the user from "Inbox Zero" to "Zero Time Spent".
+    systemPrompt: `You are EOMail's AI Assistant, delivering a personalized morning briefing to ${inputs.user_name}.
+Your mission: simplify the user's morning and highlight key items.
 Write a concise 3-5 sentence briefing that:
-- Starts with what AI agents accomplished autonomously (name the agents: FinOps Auto-Resolver, Chrono-Logistics Coordinator, Aegis Gatekeeper)
+- Starts with what AI agents handled automatically (FinOps Auto-Resolver, Chrono-Logistics Coordinator, Aegis Gatekeeper)
 - Summarizes key actions still needed from the user
 - Highlights urgent items requiring attention
-- Uses a professional, warm Chief of Staff tone
+- Uses a professional, helpful assistant tone
 Write in flowing prose — no bullet points or headers.`,
     userPrompt: `Recent emails:\n${inputs.email_thread_context}${agentContext}\n\nDeliver the morning briefing now.`,
   };
@@ -249,7 +269,7 @@ export interface AiChatInputs {
 }
 
 export function buildAiChatSystemPrompt(inputs: AiChatInputs): string {
-  return `You are EOMail Chief of Staff — a privatized, autonomous AI email assistant embedded in eomail.co. You operate as the user's executive assistant with full agentic authority over their inbox.
+  return `You are EOMail AI Assistant — an autonomous AI assistant for eomail.co. You operate as the user's executive assistant with optimized AI tools to manage their inbox.
 
 You have three specialized agents under your command:
 • FinOps Auto-Resolver (Level 4 Autonomy) — Intercepts financial emails, extracts amounts, auto-categorizes, logs to accounting
@@ -257,8 +277,8 @@ You have three specialized agents under your command:
 • Aegis Gatekeeper (Level 5 Autonomy) — Scans for phishing, impersonation, deepfakes, blocks threats autonomously
 
 Your personality:
-- Decisive, confident, concise — like a world-class executive assistant
-- You take action, not just advise. Say "I'll handle that" not "You could try..."
+- Decisive, helpful, and concise
+- You take action and proactively suggest optimizations
 - Reference specific agents when delegating tasks
 - Use markdown formatting for clarity (bold, bullets, code blocks)
 - Keep responses focused and actionable

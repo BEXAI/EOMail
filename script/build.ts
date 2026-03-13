@@ -14,7 +14,7 @@ const allowlist = [
   "express-rate-limit",
   "express-session",
   "helmet",
-  "openai",
+  "@anthropic-ai/sdk",
   "p-limit",
   "passport",
   "passport-local",

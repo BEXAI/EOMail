@@ -89,16 +89,14 @@ export function EmailList({
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const isMobile = useIsMobile();
-  const parentRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const virtualizer = useVirtualizer({
+  const rowVirtualizer = useVirtualizer({
     count: emails.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 120,
-    overscan: 5,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 110,
+    overscan: 10,
   });
-
-  const virtualItems = virtualizer.getVirtualItems();
 
   const toggleCheck = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -211,10 +209,10 @@ export function EmailList({
         )}
       </div>
 
-      <div ref={parentRef} className="flex-1 overflow-y-auto scrollbar-thin">
-        <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
-          {virtualItems.map((virtualItem) => {
-            const email = emails[virtualItem.index];
+      <div className="flex-1 overflow-y-auto scrollbar-thin animate-stagger-fade-in relative" ref={scrollRef}>
+        <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const email = emails[virtualRow.index];
             const isSelected = selectedId === email.id;
             const isHovered = hoveredId === email.id;
             const isChecked = checkedIds.has(email.id);
@@ -226,6 +224,8 @@ export function EmailList({
             return (
               <div
                 key={email.id}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
                 role="option"
                 aria-selected={isSelected}
                 tabIndex={0}
@@ -234,26 +234,29 @@ export function EmailList({
                 onMouseEnter={() => setHoveredId(email.id)}
                 onMouseLeave={() => setHoveredId(null)}
                 data-testid={`email-item-${email.id}`}
+                className={cn(
+                  "flex items-start gap-4 px-4 py-4 cursor-pointer border-b border-border/50 transition-all duration-200 group outline-none",
+                  "focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-inset",
+                  isSelected
+                    ? "bg-primary/[0.07] border-l-[4px] border-l-primary shadow-inner"
+                    : !email.read
+                      ? "bg-background hover:bg-muted/40"
+                      : "bg-muted/10 hover:bg-muted/30 opacity-90 hover:opacity-100",
+                  isSelected && "pl-[12px]"
+                )}
                 style={{
                   position: 'absolute',
                   top: 0,
                   left: 0,
                   width: '100%',
-                  height: `${virtualItem.size}px`,
-                  transform: `translateY(${virtualItem.start}px)`,
+                  transform: `translateY(${virtualRow.start}px)`,
                 }}
-                className={cn(
-                  "flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-border transition-all duration-150 relative group outline-none",
-                  "focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset",
-                  isSelected
-                    ? "bg-primary/8 border-l-[3px] border-l-primary"
-                    : !email.read
-                    ? "bg-background hover:bg-muted/40"
-                    : "bg-muted/20 hover:bg-muted/50",
-                  isSelected && "pl-[13px]"
-                )}
               >
-                <div className="flex items-center gap-2 mt-1 shrink-0">
+                {/* Active Indicator Glow */}
+                {isSelected && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent pointer-events-none" />
+                )}
+                <div className="flex items-center gap-2 mt-1 shrink-0 z-10">
                   <div
                     onClick={(e) => toggleCheck(email.id, e)}
                     className={cn(
@@ -284,7 +287,7 @@ export function EmailList({
                 {email.aiProcessed && email.aiUrgency && (
                   <span
                     className={cn(
-                      "w-2 h-2 rounded-full shrink-0 mt-3",
+                      "w-2 h-2 rounded-full shrink-0 mt-3 z-10",
                       urgencyDotColors[email.aiUrgency]
                     )}
                     title={`${email.aiUrgency} urgency`}
@@ -294,7 +297,7 @@ export function EmailList({
 
                 <div
                   className={cn(
-                    "w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold mt-0.5 transition-transform duration-100",
+                    "w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold mt-0.5 transition-transform duration-100 z-10",
                     avatarColor,
                     isSelected && "scale-95"
                   )}
@@ -302,12 +305,12 @@ export function EmailList({
                   {initials}
                 </div>
 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 z-10">
                   <div className="flex items-center justify-between gap-2 mb-0.5">
                     <span
                       className={cn(
-                        "text-sm truncate",
-                        !email.read ? "font-bold text-foreground" : "font-medium text-foreground/80"
+                        "truncate tracking-wide",
+                        !email.read ? "font-black text-foreground text-[15px]" : "font-medium text-foreground/80 text-sm"
                       )}
                       data-testid={`sender-${email.id}`}
                       dangerouslySetInnerHTML={{ __html: highlightText(email.from, search) }}
@@ -381,7 +384,7 @@ export function EmailList({
                   </div>
 
                   <div
-                    className={cn("text-sm truncate mb-0.5", !email.read ? "font-semibold text-foreground" : "text-foreground/70")}
+                    className={cn("truncate mb-0.5 tracking-wide", !email.read ? "font-extrabold text-foreground text-[14px]" : "font-semibold text-foreground/70 text-sm")}
                     dangerouslySetInnerHTML={{ __html: highlightText(email.subject, search) }}
                     data-testid={`subject-${email.id}`}
                   />

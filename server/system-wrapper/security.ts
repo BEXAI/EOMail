@@ -75,6 +75,9 @@ export function sanitizeMessages(
 export function validateApiKey(key: string | undefined): boolean {
   if (!key) return false;
   if (key.length < 20) return false;
+  // Anthropic keys: sk-ant-api03-... (90+ chars)
+  if (key.startsWith("sk-ant-") && key.length > 40) return true;
+  // Legacy OpenAI keys (backwards compat)
   if (key.startsWith("sk-") && key.length > 40) return true;
   if (key.length >= 32) return true;
   return false;

@@ -25,10 +25,10 @@ import {
   executeMultiTurnChat,
 } from "./system-wrapper/api-gateway";
 
-if (!process.env.OPENAI_API_KEY) {
+if (!process.env.ANTHROPIC_API_KEY) {
   console.error(
-    "[EOMail AI] CRITICAL: OPENAI_API_KEY is not set.\n" +
-      "All AI features will fail. Add OPENAI_API_KEY in Secrets."
+    "[EOMail AI] CRITICAL: ANTHROPIC_API_KEY is not set.\n" +
+      "All AI features will fail. Add ANTHROPIC_API_KEY in Secrets."
   );
 }
 

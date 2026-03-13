@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import type { UseMutationResult } from "@tanstack/react-query";
-import type { Email } from "@shared/schema";
+import { type Email } from "@shared/schema";
+import { type UseMutationResult } from "@tanstack/react-query";
 
 interface KeyboardShortcuts {
   composing: boolean;
@@ -10,9 +10,9 @@ interface KeyboardShortcuts {
   handleReply: (email: Email) => void;
   handleSelectEmail: (email: Email | null) => void;
   closeCompose: () => void;
-  starMutation: UseMutationResult<void, Error, { id: string; starred: boolean }>;
-  archiveMutation: UseMutationResult<void, Error, string>;
-  deleteMutation: UseMutationResult<void, Error, string>;
+  starMutation: UseMutationResult<any, Error, { id: string; starred: boolean }>;
+  archiveMutation: UseMutationResult<any, Error, string>;
+  deleteMutation: UseMutationResult<any, Error, string>;
   searchRef: React.RefObject<HTMLInputElement>;
   setCommandBarOpen: (open: boolean) => void;
 }

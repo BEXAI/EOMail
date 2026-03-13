@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { type Email } from "@shared/schema";
@@ -9,9 +9,6 @@ import { ComposeDialog, type ComposeData } from "@/components/compose-dialog";
 import { MorningBriefing } from "@/components/morning-briefing";
 import { AiCommandBar } from "@/components/ai-command-bar";
 import { AiChatPanel } from "@/components/ai-chat-panel";
-import { FinOpsPanel } from "@/components/finops-panel";
-import { ChronoCalendar } from "@/components/chrono-calendar";
-import { AegisSecurityPanel } from "@/components/aegis-security-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   SidebarProvider,
@@ -25,10 +22,12 @@ import {
   Search,
   RefreshCw,
   X,
+  SlidersHorizontal,
   Keyboard,
   Bot,
   LogIn,
   UserPlus,
+  Sparkles,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -40,8 +39,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useEmailActions } from "@/hooks/use-email-actions";
+import { useEmailMutations } from "@/hooks/use-email-mutations";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
-import { useDemoData } from "@/hooks/use-demo-data";
+import { getDemoEmails, DEMO_COUNTS, DEMO_USER } from "@/lib/demo-data";
 
 const FOLDER_LABELS: Record<string, string> = {
   inbox: "Inbox",
@@ -53,12 +53,7 @@ const FOLDER_LABELS: Record<string, string> = {
   spam: "Spam",
   trash: "Trash",
   all: "All Mail",
-  finops: "FinOps Dashboard",
-  calendar: "Calendar",
-  security: "Security Dashboard",
 };
-
-const VIRTUAL_FOLDERS = new Set(["finops", "calendar", "security"]);
 
 export default function MailPage() {
   const [folder, setFolder] = useState<string>("inbox");
@@ -70,36 +65,27 @@ export default function MailPage() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user, isDemoMode, logoutMutation } = useAuth();
-  const demoData = useDemoData(isDemoMode);
   const [, setLocation] = useLocation();
   const searchRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    return () => {
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    };
-  }, []);
 
   const queryParams = new URLSearchParams({ folder });
   if (search) queryParams.append("search", search);
   if (labelFilter) queryParams.append("label", labelFilter);
 
-  const isVirtualFolder = VIRTUAL_FOLDERS.has(folder);
-
-  const { data: liveEmails = [], isLoading: liveEmailsLoading } = useQuery<Email[]> ({
+  const { data: liveEmails = [], isLoading: liveEmailsLoading } = useQuery<Email[]>({
     queryKey: ["/api/emails", folder, search, labelFilter],
     queryFn: async () => {
       const res = await fetch(`/api/emails?${queryParams}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch emails");
       return res.json();
     },
-    enabled: !!user && !isVirtualFolder,
+    enabled: !!user,
   });
 
   const { data: liveCounts = {} } = useQuery<Record<string, number>>({
@@ -107,21 +93,10 @@ export default function MailPage() {
     enabled: !!user,
   });
 
-  const demoEmails = useMemo(() => demoData?.getDemoEmails(folder) ?? [], [demoData, folder]);
+  const demoEmails = useMemo(() => getDemoEmails(folder), [folder]);
   const emails = isDemoMode ? demoEmails : liveEmails;
   const emailsLoading = isDemoMode ? false : liveEmailsLoading;
-  const counts = isDemoMode ? (demoData?.DEMO_COUNTS ?? {}) : liveCounts;
-
-  const invalidateEmails = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
-  }, [queryClient]);
-
-  const invalidateAll = useCallback(() => {
-    invalidateEmails();
-    queryClient.invalidateQueries({ queryKey: ["/api/ai/activity"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
-  }, [queryClient, invalidateEmails]);
+  const counts = isDemoMode ? DEMO_COUNTS : liveCounts;
 
   const closeCompose = useCallback(() => {
     setComposing(false);
@@ -136,119 +111,20 @@ export default function MailPage() {
   }, []);
 
   const {
+    sendMutation,
+    saveDraftMutation,
+    discardDraftMutation,
+    bulkMutation,
+    invalidateAll
+  } = useEmailMutations({ user, folder, setSelectedEmail });
+
+  const {
     markReadMutation,
     starMutation,
     deleteMutation,
     moveMutation,
     archiveMutation,
   } = useEmailActions(selectedEmail, setSelectedEmail, folder);
-
-  const sendMutation = useMutation({
-    mutationFn: async (data: ComposeData & { draftId?: string }) => {
-      const now = new Date();
-      await apiRequest("POST", "/api/emails", {
-        from: user?.displayName || user?.username || "You",
-        fromEmail: user?.mailboxAddress || user?.email || "",
-        to: data.to.split("@")[0] || data.to,
-        toEmail: data.to,
-        cc: data.cc || "",
-        bcc: data.bcc || "",
-        subject: data.subject || "(no subject)",
-        body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
-        preview: data.body.slice(0, 120),
-        timestamp: now.toISOString(),
-        read: true,
-        starred: false,
-        folder: "sent",
-        labels: [],
-        attachments: 0,
-      });
-      if (data.draftId) {
-        await apiRequest("DELETE", `/api/emails/${data.draftId}`);
-      }
-    },
-    onSuccess: () => {
-      invalidateEmails();
-      toast({ title: "Email sent", description: "Your message has been sent successfully." });
-    },
-    onError: () => {
-      toast({ title: "Failed to send", description: "Something went wrong. Please try again.", variant: "destructive" });
-    },
-  });
-
-  const saveDraftMutation = useMutation({
-    mutationFn: async (data: ComposeData & { draftId?: string }) => {
-      const now = new Date();
-      if (data.draftId) {
-        await apiRequest("PATCH", `/api/emails/${data.draftId}`, {
-          to: data.to.split("@")[0] || data.to || "Draft",
-          toEmail: data.to || "",
-          cc: data.cc || "",
-          bcc: data.bcc || "",
-          subject: data.subject || "(no subject)",
-          body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
-          preview: data.body.slice(0, 120) || "(empty draft)",
-          folder: "drafts",
-        });
-      } else {
-        await apiRequest("POST", "/api/emails", {
-          from: user?.displayName || user?.username || "You",
-          fromEmail: user?.mailboxAddress || user?.email || "",
-          to: data.to.split("@")[0] || data.to || "Draft",
-          toEmail: data.to || "",
-          cc: data.cc || "",
-          bcc: data.bcc || "",
-          subject: data.subject || "(no subject)",
-          body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
-          preview: data.body.slice(0, 120) || "(empty draft)",
-          timestamp: now.toISOString(),
-          read: true,
-          starred: false,
-          folder: "drafts",
-          labels: [],
-          attachments: 0,
-        });
-      }
-    },
-    onSuccess: () => {
-      invalidateEmails();
-      toast({ title: "Draft saved" });
-    },
-    onError: () => {
-      toast({ title: "Failed to save draft", variant: "destructive" });
-    },
-  });
-
-  const bulkMutation = useMutation({
-    mutationFn: async ({ ids, action }: { ids: string[]; action: string }) => {
-      const bulkUpdates: Record<string, { action: string; updates?: Record<string, any> }> = {
-        delete: folder === "trash"
-          ? { action: "delete" }
-          : { action: "update", updates: { folder: "trash" } },
-        read: { action: "update", updates: { read: true } },
-        unread: { action: "update", updates: { read: false } },
-        star: { action: "update", updates: { starred: true } },
-        archive: { action: "update", updates: { folder: "archive" } },
-      };
-      const config = bulkUpdates[action];
-      if (config) {
-        await apiRequest("POST", "/api/emails/bulk", { ids, ...config });
-      }
-    },
-    onSuccess: (_, { action }) => {
-      invalidateEmails();
-      setSelectedEmail(null);
-      const messages: Record<string, string> = {
-        delete: folder === "trash" ? "Emails deleted permanently" : "Moved to trash",
-        read: "Marked as read",
-        unread: "Marked as unread",
-        star: "Starred",
-        archive: "Archived",
-      };
-      toast({ title: messages[action] || "Done" });
-    },
-    onError: () => { toast({ title: "Bulk action failed", variant: "destructive" }); },
-  });
 
   const handleSelectEmail = useCallback((email: Email | null) => {
     if (folder === "drafts" && email) {
@@ -288,42 +164,6 @@ export default function MailPage() {
     setComposing(true);
   }, []);
 
-  const handleReplyAll = useCallback((email: Email) => {
-    const allRecipients = [email.fromEmail];
-    if (email.cc) {
-      allRecipients.push(...email.cc.split(",").map((e) => e.trim()).filter(Boolean));
-    }
-    const selfEmail = user?.mailboxAddress || user?.email || "";
-    const toList = allRecipients.filter((e) => e.toLowerCase() !== selfEmail.toLowerCase()).join(", ");
-    setReplyTo(null);
-    setComposePrefill({
-      to: toList,
-      subject: `Re: ${email.subject.replace(/^Re: /, "")}`,
-      body: "",
-    });
-    setComposing(true);
-  }, [user]);
-
-  const handleForward = useCallback((email: Email) => {
-    const fwdBody = [
-      "",
-      "---------- Forwarded message ----------",
-      `From: ${email.from} <${email.fromEmail}>`,
-      `Date: ${new Date(email.timestamp).toLocaleString()}`,
-      `Subject: ${email.subject}`,
-      `To: ${email.to}`,
-      "",
-      email.body.replace(/<[^>]+>/g, ""),
-    ].join("\n");
-    setReplyTo(null);
-    setComposePrefill({
-      to: "",
-      subject: `Fwd: ${email.subject.replace(/^Fwd: /, "")}`,
-      body: fwdBody,
-    });
-    setComposing(true);
-  }, []);
-
   const handleRefresh = () => {
     invalidateAll();
     toast({ title: "Refreshed" });
@@ -332,17 +172,6 @@ export default function MailPage() {
   const handleSaveDraft = useCallback((data: ComposeData & { draftId?: string }) => {
     saveDraftMutation.mutate(data);
   }, [saveDraftMutation]);
-
-  const discardDraftMutation = useMutation({
-    mutationFn: async (draftId: string) => {
-      await apiRequest("DELETE", `/api/emails/${draftId}`);
-    },
-    onSuccess: () => {
-      invalidateEmails();
-      toast({ title: "Draft discarded" });
-    },
-    onError: () => { toast({ title: "Failed to discard draft", variant: "destructive" }); },
-  });
 
   const handleDiscardDraft = useCallback((draftId: string) => {
     discardDraftMutation.mutate(draftId);
@@ -370,8 +199,8 @@ export default function MailPage() {
           variant="outline"
           size="sm"
           onClick={() => {
-            if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-            undoTimerRef.current = null;
+            if (undoTimer) clearTimeout(undoTimer);
+            setUndoTimer(null);
             dismiss();
             setComposing(true);
             toast({ title: "Send cancelled" });
@@ -386,11 +215,11 @@ export default function MailPage() {
 
     const timer = setTimeout(() => {
       sendMutation.mutate({ ...data, draftId: currentDraftId });
-      undoTimerRef.current = null;
+      setUndoTimer(null);
       closeCompose();
     }, 5000);
 
-    undoTimerRef.current = timer;
+    setUndoTimer(timer);
   };
 
   const handleCompose = useCallback(() => {
@@ -458,10 +287,10 @@ export default function MailPage() {
           onFolderChange={handleFolderChange}
           activeLabel={labelFilter}
           onLabelFilter={handleLabelFilter}
-          userName={user?.displayName || (isDemoMode ? demoData?.DEMO_USER.displayName : undefined)}
-          userEmail={user?.email || (isDemoMode ? demoData?.DEMO_USER.email : undefined)}
-          userInitials={user?.avatarInitials || (isDemoMode ? demoData?.DEMO_USER.avatarInitials : undefined)}
-          mailboxAddress={user?.mailboxAddress || (isDemoMode ? demoData?.DEMO_USER.mailboxAddress : undefined)}
+          userName={user?.displayName || (isDemoMode ? DEMO_USER.displayName : undefined)}
+          userEmail={user?.email || (isDemoMode ? DEMO_USER.email : undefined)}
+          userInitials={user?.avatarInitials || (isDemoMode ? DEMO_USER.avatarInitials : undefined)}
+          mailboxAddress={user?.mailboxAddress || (isDemoMode ? DEMO_USER.mailboxAddress : undefined)}
           isDemo={isDemoMode}
         />
 
@@ -501,6 +330,7 @@ export default function MailPage() {
                     variant="ghost"
                     onClick={handleRefresh}
                     data-testid="button-refresh"
+                    aria-label="Refresh mailbox"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </Button>
@@ -509,7 +339,7 @@ export default function MailPage() {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="icon" variant="ghost" data-testid="button-keyboard-shortcuts">
+                  <Button size="icon" variant="ghost" data-testid="button-keyboard-shortcuts" aria-label="Keyboard shortcuts">
                     <Keyboard className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
@@ -529,11 +359,27 @@ export default function MailPage() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
+                    variant="outline"
+                    size="sm"
+                    className="hidden md:flex items-center gap-2 rounded-full border-muted-foreground/20 text-muted-foreground hover:text-foreground h-8"
+                    onClick={() => setCommandBarOpen(true)}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-xs font-medium">AI Command</span>
+                    <kbd className="hidden lg:inline-flex bg-muted rounded border px-1.5 py-0.5 text-[10px] font-mono leading-none items-center text-muted-foreground">⌘K</kbd>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>AI Command Actions</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
                     size="icon"
                     variant="ghost"
                     onClick={() => setChatPanelOpen(!chatPanelOpen)}
                     className={cn(chatPanelOpen && "bg-violet-500/10 text-violet-500")}
                     data-testid="button-ai-chat-toggle"
+                    aria-label="Toggle AI Assistant"
                   >
                     <Bot className="w-4 h-4" />
                   </Button>
@@ -565,78 +411,66 @@ export default function MailPage() {
             </div>
           </header>
 
-          <div className="flex flex-1 min-h-0 overflow-hidden">
-            {isVirtualFolder ? (
-              <div className="flex-1 overflow-hidden">
-                {folder === "finops" && <FinOpsPanel isDemo={isDemoMode} />}
-                {folder === "calendar" && <ChronoCalendar isDemo={isDemoMode} />}
-                {folder === "security" && <AegisSecurityPanel isDemo={isDemoMode} />}
-              </div>
-            ) : (
-              <>
-                <div
-                  className={cn(
-                    "flex flex-col border-r border-border overflow-hidden transition-all",
-                    selectedEmail
-                      ? "hidden md:flex md:w-[380px] md:min-w-[280px] md:shrink-0"
-                      : "flex-1"
+          <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
+            <div
+              className={cn(
+                "flex flex-col border-r border-border overflow-hidden transition-all",
+                selectedEmail
+                  ? "hidden md:flex md:w-[380px] md:min-w-[280px] md:shrink-0"
+                  : "flex-1 md:w-[380px] md:min-w-[280px] md:shrink-0"
+              )}
+            >
+              <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="font-semibold text-sm text-foreground" data-testid="folder-title">
+                    {headerTitle}
+                  </h2>
+                  {search && (
+                    <span className="text-xs text-muted-foreground">
+                      — {emails.length} result{emails.length !== 1 ? "s" : ""} for "{search}"
+                    </span>
                   )}
-                >
-                  <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="font-semibold text-sm text-foreground" data-testid="folder-title">
-                        {headerTitle}
-                      </h2>
-                      {search && (
-                        <span className="text-xs text-muted-foreground">
-                          — {emails.length} result{emails.length !== 1 ? "s" : ""} for "{search}"
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1" />
-                  </div>
-
-                  <div className="flex-1 overflow-hidden">
-                    <EmailList
-                      emails={emails}
-                      isLoading={emailsLoading}
-                      selectedId={selectedEmail?.id ?? null}
-                      onSelect={handleSelectEmail}
-                      {...emailActions}
-                      onBulkAction={(ids, action) => bulkMutation.mutate({ ids, action })}
-                      folder={folder}
-                      search={search}
-                      labelFilter={labelFilter}
-                    />
-                  </div>
                 </div>
+                <div className="flex items-center gap-1">
+                </div>
+              </div>
 
-                {selectedEmail && (
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <EmailDetail
-                      email={selectedEmail}
-                      onBack={() => setSelectedEmail(null)}
-                      {...emailActions}
-                      onReply={handleReply}
-                      onReplyAll={handleReplyAll}
-                      onForward={handleForward}
-                      onCompose={handleComposeWithPrefill}
-                      isDemo={isDemoMode}
-                    />
-                  </div>
-                )}
+              <div className="flex-1 overflow-hidden">
+                <EmailList
+                  emails={emails}
+                  isLoading={emailsLoading}
+                  selectedId={selectedEmail?.id ?? null}
+                  onSelect={handleSelectEmail}
+                  {...emailActions}
+                  onBulkAction={(ids, action) => bulkMutation.mutate({ ids, action })}
+                  folder={folder}
+                  search={search}
+                  labelFilter={labelFilter}
+                />
+              </div>
+            </div>
 
-                {!selectedEmail && (
-                  <div className="hidden md:flex flex-1 overflow-hidden">
-                    <MorningBriefing
-                      userName={user?.displayName || (isDemoMode ? demoData?.DEMO_USER.displayName : undefined)}
-                      emails={emails}
-                      onSelectEmail={handleSelectEmail}
-                      isDemo={isDemoMode}
-                    />
-                  </div>
-                )}
-              </>
+            {selectedEmail && (
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <EmailDetail
+                  email={selectedEmail}
+                  onBack={() => setSelectedEmail(null)}
+                  {...emailActions}
+                  onReply={handleReply}
+                  onCompose={handleComposeWithPrefill}
+                />
+              </div>
+            )}
+
+            {!selectedEmail && (
+              <div className="flex flex-1 overflow-hidden border-t md:border-t-0 md:border-l border-border h-[40vh] md:h-auto shrink-0 md:shrink">
+                <MorningBriefing
+                  userName={user?.displayName || (isDemoMode ? DEMO_USER.displayName : undefined)}
+                  emails={emails}
+                  onSelectEmail={handleSelectEmail}
+                  isDemo={isDemoMode}
+                />
+              </div>
             )}
           </div>
         </SidebarInset>
