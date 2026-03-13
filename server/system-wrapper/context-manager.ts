@@ -34,22 +34,22 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 };
 
 const MAX_PREFERENCE_STORE_SIZE = 5000;
-const PREFERENCE_TTL_MS = 30 * 60 * 1000; // 30 minutes
-const preferenceStore = new Map<string, { prefs: UserPreferences; timestamp: number }>();
+const PREFERENCE_TTL = 30 * 60 * 1000; // 30 minutes
+const preferenceStore = new Map<string, { prefs: UserPreferences; cachedAt: number }>();
 
-// Periodic sweep to evict expired preference entries
+// Sweep expired entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of preferenceStore) {
-    if (now - entry.timestamp > PREFERENCE_TTL_MS) {
+    if (now - entry.cachedAt > PREFERENCE_TTL) {
       preferenceStore.delete(key);
     }
   }
-}, 5 * 60 * 1000);
+}, 5 * 60 * 1000).unref();
 
 export async function getUserPreferences(userId: string): Promise<UserPreferences> {
   const cached = preferenceStore.get(userId);
-  if (cached && Date.now() - cached.timestamp < PREFERENCE_TTL_MS) return cached.prefs;
+  if (cached && Date.now() - cached.cachedAt < PREFERENCE_TTL) return cached.prefs;
 
   try {
     const row = await storage.getUserPreferencesRow(userId);
@@ -60,7 +60,7 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
         industry_jargon_toggle: row.industryJargonToggle || false,
         formality_level: (row.formalityLevel as UserPreferences["formality_level"]) || 3,
       };
-      preferenceStore.set(userId, { prefs, timestamp: Date.now() });
+      preferenceStore.set(userId, { prefs, cachedAt: Date.now() });
       return prefs;
     }
   } catch {
@@ -95,7 +95,7 @@ export async function setUserPreferences(
     const firstKey = preferenceStore.keys().next().value;
     if (firstKey) preferenceStore.delete(firstKey);
   }
-  preferenceStore.set(userId, { prefs: updated, timestamp: Date.now() });
+  preferenceStore.set(userId, { prefs: updated, cachedAt: Date.now() });
   return updated;
 }
 
