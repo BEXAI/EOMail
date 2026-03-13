@@ -347,24 +347,6 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/auth/resend-verification", async (req, res) => {
-    try {
-      if (!req.isAuthenticated()) return res.status(401).json({ message: "Not authenticated" });
-      const user = await storage.getUser(req.user!.id);
-      if (!user) return res.status(404).json({ message: "User not found" });
-      if (user.emailVerified) return res.json({ message: "Email already verified" });
-
-      const verificationToken = crypto.randomBytes(32).toString("hex");
-      await storage.updateUser(user.id, { verificationToken });
-      await sendVerificationEmail(user.email, verificationToken, user.displayName);
-
-      res.json({ message: "Verification email sent" });
-    } catch (err) {
-      console.error("Resend verification error:", err);
-      res.status(500).json({ message: "Something went wrong" });
-    }
-  });
-
   const updateProfileSchema = z.object({
     displayName: z.string().min(1).max(100).optional(),
     timezone: z.string().min(1).max(100).optional(),

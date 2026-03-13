@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +13,8 @@ import {
   Trash2,
   Send,
   Save,
+  Wand2,
+  Loader2,
 } from "lucide-react";
 import { type Email } from "@shared/schema";
 
@@ -145,6 +150,26 @@ export function ComposeDialog({ isOpen, onClose, onSend, onSaveDraft, onDiscardD
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, handleClose]);
+
+  const { toast } = useToast();
+
+  const expandMutation = useMutation({
+    mutationFn: async () => {
+      const recipientName = to.split("@")[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      const res = await apiRequest("POST", "/api/ai/expand-draft", {
+        notes: body,
+        recipientName,
+      });
+      return res.json() as Promise<{ draft: string }>;
+    },
+    onSuccess: (data) => {
+      setBody(data.draft);
+      toast({ title: "Draft expanded with AI" });
+    },
+    onError: () => {
+      toast({ title: "Failed to expand draft", variant: "destructive" });
+    },
+  });
 
   const handleSend = () => {
     if (!to) return;
@@ -320,6 +345,18 @@ export function ComposeDialog({ isOpen, onClose, onSend, onSaveDraft, onDiscardD
                 >
                   <Send className="w-3.5 h-3.5" />
                   {isSending ? "Sending..." : "Send"}
+                </Button>
+                <Button
+                  onClick={() => expandMutation.mutate()}
+                  disabled={expandMutation.isPending || !body.trim() || !to.trim()}
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  title="Expand notes into a full email with AI"
+                  data-testid="button-expand-ai"
+                >
+                  {expandMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                  Expand with AI
                 </Button>
               </div>
               <div className="flex items-center gap-1">

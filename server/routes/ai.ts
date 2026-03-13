@@ -159,12 +159,4 @@ export function registerAiRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/ai/process-threads", requireAuth, aiLimiter, async (req, res) => {
-    try {
-      const count = await processThreadDigests(req.user!.id);
-      res.json({ processed: count });
-    } catch (e) {
-      res.status(500).json({ error: "Failed to process thread digests" });
-    }
-  });
 }

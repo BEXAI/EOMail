@@ -28,7 +28,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Save, Loader2, LogOut, Shield, User, Sparkles } from "lucide-react";
+import { Save, Loader2, LogOut, Shield, User, Sparkles, Calendar } from "lucide-react";
 
 const TIMEZONES = [
   "America/New_York",
@@ -255,10 +255,14 @@ export default function SettingsPage() {
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-2xl mx-auto px-4 py-6">
               <Tabs defaultValue="account" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="account" className="gap-2" data-testid="tab-account">
                     <User className="w-4 h-4" />
                     Account
+                  </TabsTrigger>
+                  <TabsTrigger value="availability" className="gap-2" data-testid="tab-availability">
+                    <Calendar className="w-4 h-4" />
+                    Availability
                   </TabsTrigger>
                   <TabsTrigger value="ai-writing" className="gap-2" data-testid="tab-ai-writing">
                     <Sparkles className="w-4 h-4" />
@@ -390,6 +394,11 @@ export default function SettingsPage() {
                       </Button>
                     </CardContent>
                   </Card>
+                </TabsContent>
+
+                {/* ─── Availability Tab ─────────────────────────────── */}
+                <TabsContent value="availability" className="space-y-6">
+                  <AvailabilityEditor />
                 </TabsContent>
 
                 {/* ─── AI & Writing Tab ─────────────────────────────── */}
@@ -570,5 +579,91 @@ export default function SettingsPage() {
         </SidebarInset>
       </div>
     </SidebarProvider>
+  );
+}
+
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+interface SlotForm {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isAvailable: boolean;
+}
+
+function AvailabilityEditor() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: savedSlots = [], isLoading } = useQuery<{ dayOfWeek: number; startTime: string; endTime: string; isAvailable: boolean }[]>({
+    queryKey: ["/api/calendar/availability"],
+  });
+
+  const [slots, setSlots] = useState<SlotForm[]>([]);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && !initialized) {
+      if (savedSlots.length > 0) {
+        setSlots(savedSlots.map(s => ({ dayOfWeek: s.dayOfWeek, startTime: s.startTime, endTime: s.endTime, isAvailable: s.isAvailable ?? true })));
+      } else {
+        // Default: Mon-Fri 09:00-17:00
+        setSlots([1, 2, 3, 4, 5].map(d => ({ dayOfWeek: d, startTime: "09:00", endTime: "17:00", isAvailable: true })));
+      }
+      setInitialized(true);
+    }
+  }, [isLoading, savedSlots, initialized]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: SlotForm[]) => {
+      const res = await apiRequest("PUT", "/api/calendar/availability", { slots: data });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/calendar/availability"] });
+      toast({ title: "Availability saved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to save availability", variant: "destructive" });
+    },
+  });
+
+  const updateSlot = (index: number, field: keyof SlotForm, value: string | number | boolean) => {
+    setSlots(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
+  };
+
+  if (isLoading) {
+    return <Card><CardContent className="p-6"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></CardContent></Card>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Weekly Availability</CardTitle>
+        <CardDescription>Set your available hours for each day. AI uses this for scheduling suggestions.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {slots.map((slot, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Checkbox
+              checked={slot.isAvailable}
+              onCheckedChange={(checked) => updateSlot(i, "isAvailable", checked === true)}
+            />
+            <span className="text-sm w-24 shrink-0 font-medium">{DAY_NAMES[slot.dayOfWeek]}</span>
+            <Input type="time" value={slot.startTime} onChange={(e) => updateSlot(i, "startTime", e.target.value)} className="w-28" disabled={!slot.isAvailable} />
+            <span className="text-xs text-muted-foreground">to</span>
+            <Input type="time" value={slot.endTime} onChange={(e) => updateSlot(i, "endTime", e.target.value)} className="w-28" disabled={!slot.isAvailable} />
+          </div>
+        ))}
+        <Button
+          onClick={() => saveMutation.mutate(slots.filter(s => s.isAvailable))}
+          disabled={saveMutation.isPending}
+          className="gap-2 mt-2"
+        >
+          {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Save Availability
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

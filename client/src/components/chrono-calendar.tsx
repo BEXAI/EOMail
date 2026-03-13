@@ -9,6 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Calendar,
   Clock,
@@ -20,6 +29,9 @@ import {
   Trash2,
   Loader2,
   CalendarX,
+  Sparkles,
+  Plus,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +60,10 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
 
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
+  const [showEventDialog, setShowEventDialog] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<(CalendarEvent & { participants?: CalendarParticipant[] }) | null>(null);
+  const [eventForm, setEventForm] = useState({ title: "", description: "", startTime: "", endTime: "", location: "", meetingUrl: "" });
+  const [suggestions, setSuggestions] = useState<{ startTime: string; endTime: string; score: number; reason: string }[] | null>(null);
 
   const deleteEventMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -79,6 +95,102 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
     onSettled: () => { setResolvingConflictId(null); },
   });
 
+  const createEventMutation = useMutation({
+    mutationFn: async (data: typeof eventForm) => {
+      const res = await apiRequest("POST", "/api/calendar/events", {
+        title: data.title,
+        description: data.description || undefined,
+        startTime: new Date(data.startTime).toISOString(),
+        endTime: new Date(data.endTime).toISOString(),
+        location: data.location || undefined,
+        meetingUrl: data.meetingUrl || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/calendar/events"] });
+      setShowEventDialog(false);
+      setEventForm({ title: "", description: "", startTime: "", endTime: "", location: "", meetingUrl: "" });
+      toast({ title: "Event created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create event", variant: "destructive" });
+    },
+  });
+
+  const updateEventMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof eventForm }) => {
+      const res = await apiRequest("PATCH", `/api/calendar/events/${id}`, {
+        title: data.title,
+        description: data.description || undefined,
+        startTime: new Date(data.startTime).toISOString(),
+        endTime: new Date(data.endTime).toISOString(),
+        location: data.location || undefined,
+        meetingUrl: data.meetingUrl || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/calendar/events"] });
+      setShowEventDialog(false);
+      setEditingEvent(null);
+      setEventForm({ title: "", description: "", startTime: "", endTime: "", location: "", meetingUrl: "" });
+      toast({ title: "Event updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update event", variant: "destructive" });
+    },
+  });
+
+  const suggestTimeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/ai/suggest-time", {
+        durationMinutes: 60,
+        participantTimezones: [],
+      });
+      return res.json() as Promise<{ suggestions: { startTime: string; endTime: string; score: number; reason: string }[] }>;
+    },
+    onSuccess: (data) => {
+      setSuggestions(data.suggestions || []);
+      toast({ title: "Time suggestions ready" });
+    },
+    onError: () => {
+      toast({ title: "Failed to suggest times", variant: "destructive" });
+    },
+  });
+
+  const openCreateDialog = () => {
+    setEditingEvent(null);
+    setEventForm({ title: "", description: "", startTime: "", endTime: "", location: "", meetingUrl: "" });
+    setShowEventDialog(true);
+  };
+
+  const openEditDialog = (event: CalendarEvent & { participants?: CalendarParticipant[] }) => {
+    setEditingEvent(event);
+    const toLocal = (d: Date | string) => {
+      const dt = new Date(d);
+      return new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    };
+    setEventForm({
+      title: event.title,
+      description: event.description || "",
+      startTime: toLocal(event.startTime),
+      endTime: toLocal(event.endTime),
+      location: event.location || "",
+      meetingUrl: event.meetingUrl || "",
+    });
+    setShowEventDialog(true);
+  };
+
+  const handleEventSubmit = () => {
+    if (!eventForm.title || !eventForm.startTime || !eventForm.endTime) return;
+    if (editingEvent) {
+      updateEventMutation.mutate({ id: editingEvent.id, data: eventForm });
+    } else {
+      createEventMutation.mutate(eventForm);
+    }
+  };
+
   if (eventsLoading) {
     return (
       <div className="flex flex-col h-full p-6 gap-4">
@@ -105,11 +217,25 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
             <h1 className="text-xl font-bold text-foreground">Calendar</h1>
             <p className="text-xs text-muted-foreground">Meetings extracted from your emails</p>
           </div>
-          {unresolvedConflicts.length > 0 && (
-            <Badge className="ml-auto bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-              {unresolvedConflicts.length} conflict{unresolvedConflicts.length > 1 ? "s" : ""}
-            </Badge>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            {unresolvedConflicts.length > 0 && (
+              <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                {unresolvedConflicts.length} conflict{unresolvedConflicts.length > 1 ? "s" : ""}
+              </Badge>
+            )}
+            {!isDemo && (
+              <>
+                <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => suggestTimeMutation.mutate()} disabled={suggestTimeMutation.isPending}>
+                  {suggestTimeMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                  Suggest Time
+                </Button>
+                <Button size="sm" className="gap-1 text-xs h-7" onClick={openCreateDialog}>
+                  <Plus className="w-3 h-3" />
+                  Event
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -127,6 +253,27 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
           </div>
 
           <TabsContent value="events" className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-3 mt-0 transition-all duration-200">
+            {suggestions && suggestions.length > 0 && (
+              <Card className="border-blue-200 dark:border-blue-900 mb-3">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">AI Suggested Times</p>
+                    <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setSuggestions(null)}>Dismiss</Button>
+                  </div>
+                  <div className="space-y-2">
+                    {suggestions.map((s, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs p-2 rounded-md bg-muted/50">
+                        <div>
+                          <p className="font-medium text-foreground">{new Date(s.startTime).toLocaleString()} — {new Date(s.endTime).toLocaleTimeString()}</p>
+                          <p className="text-muted-foreground">{s.reason}</p>
+                        </div>
+                        <Badge variant="secondary" className="text-[10px]">Score: {s.score}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             {sortedEvents.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <CalendarX className="w-12 h-12 text-muted-foreground/40 mb-3" />
@@ -139,6 +286,7 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
                   key={event.id}
                   event={event}
                   onDelete={() => deleteEventMutation.mutate(event.id)}
+                  onEdit={() => openEditDialog(event)}
                   isDeleting={deletingEventId === event.id}
                   isDemo={isDemo}
                 />
@@ -167,6 +315,49 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={showEventDialog} onOpenChange={setShowEventDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingEvent ? "Edit Event" : "Create Event"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="event-title">Title</Label>
+              <Input id="event-title" value={eventForm.title} onChange={(e) => setEventForm(f => ({ ...f, title: e.target.value }))} placeholder="Meeting title" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="event-desc">Description</Label>
+              <Input id="event-desc" value={eventForm.description} onChange={(e) => setEventForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional description" className="mt-1" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="event-start">Start</Label>
+                <Input id="event-start" type="datetime-local" value={eventForm.startTime} onChange={(e) => setEventForm(f => ({ ...f, startTime: e.target.value }))} className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="event-end">End</Label>
+                <Input id="event-end" type="datetime-local" value={eventForm.endTime} onChange={(e) => setEventForm(f => ({ ...f, endTime: e.target.value }))} className="mt-1" />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="event-location">Location</Label>
+              <Input id="event-location" value={eventForm.location} onChange={(e) => setEventForm(f => ({ ...f, location: e.target.value }))} placeholder="Office, Room 301" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="event-url">Meeting URL</Label>
+              <Input id="event-url" value={eventForm.meetingUrl} onChange={(e) => setEventForm(f => ({ ...f, meetingUrl: e.target.value }))} placeholder="https://meet.google.com/..." className="mt-1" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEventDialog(false)}>Cancel</Button>
+            <Button onClick={handleEventSubmit} disabled={!eventForm.title || !eventForm.startTime || !eventForm.endTime || createEventMutation.isPending || updateEventMutation.isPending}>
+              {(createEventMutation.isPending || updateEventMutation.isPending) ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+              {editingEvent ? "Save Changes" : "Create Event"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -174,11 +365,13 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
 function EventCard({
   event,
   onDelete,
+  onEdit,
   isDeleting,
   isDemo,
 }: {
   event: CalendarEvent & { participants?: CalendarParticipant[] };
   onDelete: () => void;
+  onEdit: () => void;
   isDeleting: boolean;
   isDemo?: boolean;
 }) {
@@ -274,7 +467,18 @@ function EventCard({
 
         <div className="flex items-center gap-2 pt-2 border-t border-border">
           <Badge variant="outline" className="text-[10px] capitalize">{event.status}</Badge>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="gap-1 text-xs text-muted-foreground h-7"
+              onClick={onEdit}
+              disabled={isDemo}
+              aria-label="Edit calendar event"
+            >
+              <Pencil className="w-3 h-3" />
+              Edit
+            </Button>
             <Button
               size="sm"
               variant="ghost"

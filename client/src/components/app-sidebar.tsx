@@ -247,6 +247,24 @@ function CustomFoldersSection({
     },
   });
 
+  const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
+
+  const deleteFolderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/folders/${id}`);
+    },
+    onMutate: (id) => { setDeletingFolderId(id); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+      toast({ title: "Folder deleted" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to delete folder", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => { setDeletingFolderId(null); },
+  });
+
   const createFolderMutation = useMutation({
     mutationFn: async (name: string) => {
       const res = await apiRequest("POST", "/api/folders", { name });
@@ -394,7 +412,7 @@ function CustomFoldersSection({
                 }
 
                 return (
-                  <SidebarMenuItem key={folder.id}>
+                  <SidebarMenuItem key={folder.id} className="group/folder">
                     <SidebarMenuButton
                       onClick={() => { onLabelFilter(null); onFolderChange(folderKey); }}
                       isActive={isActive}
@@ -407,7 +425,27 @@ function CustomFoldersSection({
                       <FolderIcon className={cn("w-4 h-4 shrink-0", colorClass)} />
                       <span className="flex-1 text-sm">{folder.name}</span>
                       {count > 0 && (
-                        <span className="text-xs font-semibold ml-auto text-muted-foreground">{count}</span>
+                        <span className="text-xs font-semibold ml-auto text-muted-foreground group-hover/folder:hidden">{count}</span>
+                      )}
+                      {!isDemo && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`Delete folder "${folder.name}"? Emails will be moved to inbox.`)) {
+                              deleteFolderMutation.mutate(folder.id);
+                            }
+                          }}
+                          className="hidden group-hover/folder:flex items-center justify-center w-4 h-4 ml-auto rounded hover:bg-destructive/10 shrink-0"
+                          disabled={deletingFolderId === folder.id}
+                          aria-label={`Delete folder ${folder.name}`}
+                          data-testid={`button-delete-folder-${folder.name.toLowerCase().replace(/\s+/g, "-")}`}
+                        >
+                          {deletingFolderId === folder.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <X className="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                          )}
+                        </button>
                       )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
