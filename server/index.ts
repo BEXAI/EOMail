@@ -47,6 +47,19 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Block probes for sensitive file paths (before any routes)
+const BLOCKED_PATH_PATTERNS = [
+  /\/\.env/i, /\/\.git/i, /\/\.ssh/i, /\/\.aws/i,
+  /\/\.npmrc/i, /\/\.docker/i, /\/\.htaccess/i,
+  /\/credentials/i, /\/wp-admin/i, /\/wp-login/i, /\/phpmyadmin/i,
+];
+app.use((req, res, next) => {
+  if (BLOCKED_PATH_PATTERNS.some((p) => p.test(req.path))) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  next();
+});
+
 setupAuth(app);
 
 export function log(message: string, source = "express") {
