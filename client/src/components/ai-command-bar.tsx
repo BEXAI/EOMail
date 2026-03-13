@@ -74,8 +74,15 @@ export function AiCommandBar({ open, onOpenChange }: AiCommandBarProps) {
     onSuccess: (data) => {
       setResponse(data.response);
     },
-    onError: () => {
-      setResponse("Something went wrong. Please try again.");
+    onError: (error: Error) => {
+      const errMsg = error.message || "";
+      if (errMsg.includes("503") || errMsg.includes("unavailable")) {
+        setResponse("AI service is temporarily unavailable due to billing. Your emails and other features continue to work normally.");
+      } else if (errMsg.includes("not configured")) {
+        setResponse("AI service is not yet configured. Please set the API key in your deployment settings.");
+      } else {
+        setResponse("Something went wrong processing that command. Please try again.");
+      }
     },
   });
 

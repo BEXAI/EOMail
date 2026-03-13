@@ -179,19 +179,14 @@ export async function handleAiCommand(
   userCommand: string,
   emailContext: string
 ): Promise<string> {
-  try {
-    const prompt = buildAiCommandPrompt({
-      user_command: userCommand,
-      email_thread_context: emailContext,
-      user_name: "the user",
-    });
+  const prompt = buildAiCommandPrompt({
+    user_command: userCommand,
+    email_thread_context: emailContext,
+    user_name: "the user",
+  });
 
-    const response = await executePrompt(prompt);
-    return response.content;
-  } catch (error) {
-    console.error("[handleAiCommand] Failed:", error);
-    return "I couldn't process that command.";
-  }
+  const response = await executePrompt(prompt);
+  return response.content;
 }
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -201,26 +196,21 @@ export async function handleAiChat(
   emailContext: string,
   emailCount: number = 0
 ): Promise<string> {
-  try {
-    const systemContent = buildAiChatSystemPrompt({
-      email_context: emailContext,
-      email_count: emailCount,
-    });
+  const systemContent = buildAiChatSystemPrompt({
+    email_context: emailContext,
+    email_count: emailCount,
+  });
 
-    const apiMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-      { role: "system", content: systemContent },
-      ...messages.slice(-20).map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-    ];
+  const apiMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: systemContent },
+    ...messages.slice(-20).map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+  ];
 
-    const response = await executeMultiTurnChat(apiMessages, 2048);
-    return response;
-  } catch (error) {
-    console.error("[handleAiChat] Failed:", error);
-    return "I couldn't process that request.";
-  }
+  const response = await executeMultiTurnChat(apiMessages, 2048);
+  return response;
 }
 
 export async function expandDraft(

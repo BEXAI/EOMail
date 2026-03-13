@@ -17,6 +17,8 @@ import {
   Trash2,
   Maximize2,
   Minimize2,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -97,19 +99,32 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
     onExpandChange?.(isFullscreen);
   }, [onExpandChange, isFullscreen]);
 
+  const [lastFailedMessages, setLastFailedMessages] = useState<ChatMessage[] | null>(null);
+
   const chatMutation = useMutation({
     mutationFn: async (newMessages: ChatMessage[]) => {
       const res = await apiRequest("POST", "/api/ai/chat", { messages: newMessages, emailId });
       return res.json();
     },
     onSuccess: (data) => {
+      setLastFailedMessages(null);
       setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
     },
-    onError: () => {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "I encountered an error processing that request. Please try again." },
-      ]);
+    onError: (error: Error) => {
+      const errMsg = error.message || "";
+      const isBilling = errMsg.includes("503") || errMsg.includes("AI_BILLING") || errMsg.includes("unavailable");
+      const isNotConfigured = errMsg.includes("AI_NOT_CONFIGURED") || errMsg.includes("not configured");
+      let content: string;
+      if (isBilling) {
+        content = "AI service is temporarily unavailable due to billing. Your emails, folders, and all other features continue to work normally. An administrator needs to add credits to the AI provider.";
+      } else if (isNotConfigured) {
+        content = "AI service is not yet configured. Please set the ANTHROPIC_API_KEY environment variable in Render.";
+      } else {
+        content = "I encountered an error processing that request. Please try again.";
+      }
+      setMessages((prev) => [...prev, { role: "assistant", content: `__ERROR__${content}` }]);
+      // Save failed messages for retry
+      setLastFailedMessages(messages);
     },
   });
 
@@ -269,39 +284,61 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
                 </div>
               )}
 
-              {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "flex animate-in fade-in slide-in-from-bottom-2 duration-300",
-                    msg.role === "user" ? "justify-end" : "justify-start"
-                  )}
-                >
+              {messages.map((msg, i) => {
+                const isError = msg.role === "assistant" && msg.content.startsWith("__ERROR__");
+                const displayContent = isError ? msg.content.slice(9) : msg.content;
+                return (
                   <div
+                    key={i}
                     className={cn(
-                      "max-w-[88%] text-[14px] leading-relaxed shadow-xl",
-                      msg.role === "user"
-                        ? "bg-gradient-to-br from-violet-600 to-indigo-700 text-white rounded-2xl rounded-tr-none px-4 py-3 border border-violet-500/20"
-                        : "bg-muted/50 text-foreground border border-border rounded-2xl rounded-tl-none px-4 py-3"
+                      "flex animate-in fade-in slide-in-from-bottom-2 duration-300",
+                      msg.role === "user" ? "justify-end" : "justify-start"
                     )}
                   >
-                    {msg.role === "assistant" && (
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-5 h-5 rounded bg-violet-500/20 flex items-center justify-center">
-                          <Bot className="w-3 h-3 text-violet-400" />
-                        </div>
-                        <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest italic">
-                          AI Assistant
-                        </span>
-                      </div>
-                    )}
                     <div
-                      className="whitespace-pre-wrap break-words font-medium [&_strong]:text-foreground [&_strong]:font-black [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_li]:my-1"
-                      dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }}
-                    />
+                      className={cn(
+                        "max-w-[88%] text-[14px] leading-relaxed shadow-xl",
+                        msg.role === "user"
+                          ? "bg-gradient-to-br from-violet-600 to-indigo-700 text-white rounded-2xl rounded-tr-none px-4 py-3 border border-violet-500/20"
+                          : isError
+                            ? "bg-amber-500/10 text-foreground border border-amber-500/30 rounded-2xl rounded-tl-none px-4 py-3"
+                            : "bg-muted/50 text-foreground border border-border rounded-2xl rounded-tl-none px-4 py-3"
+                      )}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className={cn("w-5 h-5 rounded flex items-center justify-center", isError ? "bg-amber-500/20" : "bg-violet-500/20")}>
+                            {isError ? <AlertTriangle className="w-3 h-3 text-amber-500" /> : <Bot className="w-3 h-3 text-violet-400" />}
+                          </div>
+                          <span className={cn("text-[10px] font-black uppercase tracking-widest italic", isError ? "text-amber-500" : "text-violet-400")}>
+                            {isError ? "Service Notice" : "AI Assistant"}
+                          </span>
+                        </div>
+                      )}
+                      <div
+                        className="whitespace-pre-wrap break-words font-medium [&_strong]:text-foreground [&_strong]:font-black [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_li]:my-1"
+                        dangerouslySetInnerHTML={{ __html: formatMessage(displayContent) }}
+                      />
+                      {isError && lastFailedMessages && i === messages.length - 1 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-3 gap-2 text-xs border-amber-500/30 hover:bg-amber-500/10"
+                          onClick={() => {
+                            setMessages(lastFailedMessages);
+                            setLastFailedMessages(null);
+                            chatMutation.mutate([...lastFailedMessages, messages[messages.length - 2] || { role: "user", content: "" }]);
+                          }}
+                          disabled={chatMutation.isPending}
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Retry
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {chatMutation.isPending && (
                 <div className="flex justify-start">

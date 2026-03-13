@@ -17,7 +17,9 @@ import {
   DollarSign,
   Calendar,
   Shield,
+  AlertTriangle,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 interface MorningBriefingProps {
@@ -41,10 +43,11 @@ const agentIcons: Record<string, { icon: typeof DollarSign; color: string; bgCol
 
 export function MorningBriefing({ userName, emails, onSelectEmail, isDemo }: MorningBriefingProps) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const demoData = useDemoData(isDemo);
   const firstName = userName?.split(" ")[0] || "there";
 
-  const { data: liveBriefingData, isLoading: liveBriefingLoading } = useQuery<BriefingData>({
+  const { data: liveBriefingData, isLoading: liveBriefingLoading, isError: briefingError } = useQuery<BriefingData>({
     queryKey: ["/api/ai/briefing"],
     enabled: !isDemo,
   });
@@ -62,6 +65,17 @@ export function MorningBriefing({ userName, emails, onSelectEmail, isDemo }: Mor
       queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ai/activity"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ai/briefing"] });
+    },
+    onError: (error: Error) => {
+      const errMsg = error.message || "";
+      const isBilling = errMsg.includes("503") || errMsg.includes("unavailable");
+      toast({
+        title: isBilling ? "AI service unavailable" : "Processing failed",
+        description: isBilling
+          ? "The AI provider needs billing attention. Your emails are safe — only AI processing is affected."
+          : "Could not process emails with AI. Please try again later.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -143,6 +157,13 @@ export function MorningBriefing({ userName, emails, onSelectEmail, isDemo }: Mor
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-5/6" />
                 <Skeleton className="h-4 w-4/6" />
+              </div>
+            ) : briefingError ? (
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-600 dark:text-amber-400 leading-relaxed" data-testid="briefing-text">
+                  AI briefing is temporarily unavailable. You have {unreadCount} unread email{unreadCount !== 1 ? "s" : ""} — browse your inbox below.
+                </p>
               </div>
             ) : (
               <p className="text-sm text-foreground/80 leading-relaxed" data-testid="briefing-text">

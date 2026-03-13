@@ -7,6 +7,22 @@ import { emailContextIndex } from "../ai-context";
 import { getCache, setCache, invalidateCache } from "../cache";
 import { apiError, aiLimiter } from "./_shared";
 
+function isAiBillingError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.includes("credit balance") || msg.includes("billing") || msg.includes("purchase credits");
+}
+
+function aiErrorResponse(res: any, e: unknown, fallbackMsg: string) {
+  const errMsg = e instanceof Error ? e.message : String(e);
+  if (isAiBillingError(e)) {
+    return res.status(503).json({ error: "AI service temporarily unavailable", code: "AI_BILLING" });
+  }
+  if (errMsg.includes("API key")) {
+    return res.status(503).json({ error: "AI service not configured", code: "AI_NOT_CONFIGURED" });
+  }
+  return res.status(500).json({ error: fallbackMsg });
+}
+
 export function registerAiRoutes(app: Express): void {
   app.post("/api/ai/process/:id", requireAuth, async (req, res) => {
     try {
@@ -18,7 +34,7 @@ export function registerAiRoutes(app: Express): void {
       res.json(result);
     } catch (e) {
       console.error("AI process error:", e);
-      res.status(500).json({ error: "Failed to process email with AI" });
+      aiErrorResponse(res, e, "Failed to process email with AI");
     }
   });
 
@@ -32,7 +48,7 @@ export function registerAiRoutes(app: Express): void {
       res.json({ processed: count, threadsDigested: threadCount });
     } catch (e) {
       console.error("AI process-all error:", e);
-      res.status(500).json({ error: "Failed to process emails with AI" });
+      aiErrorResponse(res, e, "Failed to process emails with AI");
     }
   });
 
@@ -75,7 +91,7 @@ export function registerAiRoutes(app: Express): void {
       res.json(result);
     } catch (e) {
       console.error("AI briefing error:", e);
-      res.status(500).json({ error: "Failed to generate briefing" });
+      aiErrorResponse(res, e, "Failed to generate briefing");
     }
   });
 
@@ -100,7 +116,7 @@ export function registerAiRoutes(app: Express): void {
       res.json({ response });
     } catch (e) {
       console.error("AI command error:", e);
-      res.status(500).json({ error: "Failed to process AI command" });
+      aiErrorResponse(res, e, "Failed to process AI command");
     }
   });
 
@@ -135,7 +151,7 @@ export function registerAiRoutes(app: Express): void {
       res.json({ response });
     } catch (e) {
       console.error("AI chat error:", e);
-      res.status(500).json({ error: "Failed to process chat message" });
+      aiErrorResponse(res, e, "Failed to process chat message");
     }
   });
 
