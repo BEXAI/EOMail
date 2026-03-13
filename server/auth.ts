@@ -34,6 +34,23 @@ const MAX_LOGIN_ATTEMPTS = 5;
 const MAX_LOGIN_ATTEMPTS_MAP_SIZE = 10000;
 const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
 
+// Short-lived cache for deserialized users to avoid DB hit on every request
+const USER_CACHE_TTL = 60_000; // 60 seconds
+const userCache = new Map<string, { user: Express.User; cachedAt: number }>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of userCache) {
+    if (now - entry.cachedAt > USER_CACHE_TTL) {
+      userCache.delete(key);
+    }
+  }
+}, 2 * 60 * 1000);
+
+function invalidateUserCache(userId: string): void {
+  userCache.delete(userId);
+}
+
 // Periodic cleanup to prevent unbounded Map growth
 setInterval(() => {
   const now = Date.now();
@@ -141,12 +158,19 @@ export function setupAuth(app: Express) {
 
   passport.deserializeUser(async (id: string, done) => {
     try {
+      const cached = userCache.get(id);
+      if (cached && Date.now() - cached.cachedAt < USER_CACHE_TTL) {
+        return done(null, cached.user);
+      }
       const user = await storage.getUser(id);
       if (!user) {
+        userCache.delete(id);
         return done(null, false);
       }
       const { password: _, verificationToken: _vt, resetToken: _rt, resetTokenExpiry: _rte, ...safeUser } = user;
-      done(null, safeUser as Express.User);
+      const expressUser = safeUser as Express.User;
+      userCache.set(id, { user: expressUser, cachedAt: Date.now() });
+      done(null, expressUser);
     } catch (err) {
       done(err);
     }
@@ -235,8 +259,10 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/auth/logout", (req, res, next) => {
+    const userId = req.user?.id;
     req.logout((err) => {
       if (err) return next(err);
+      if (userId) invalidateUserCache(userId);
       req.session.destroy((err) => {
         if (err) return next(err);
         res.clearCookie("connect.sid");
@@ -381,6 +407,7 @@ export function setupAuth(app: Express) {
 
       const updated = await storage.updateUser(req.user!.id, updates);
       if (!updated) return res.status(404).json({ message: "User not found" });
+      invalidateUserCache(req.user!.id);
 
       const { password: _, verificationToken: _vt, resetToken: _rt, resetTokenExpiry: _rte, ...safeUser } = updated;
       res.json(safeUser);
@@ -412,6 +439,7 @@ export function setupAuth(app: Express) {
 
       const hashedPassword = await bcrypt.hash(newPassword, 10);
       await storage.updateUser(user.id, { password: hashedPassword });
+      invalidateUserCache(user.id);
 
       res.json({ message: "Password changed successfully" });
     } catch (err) {

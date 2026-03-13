@@ -19,7 +19,7 @@ import {
   threatScanLogs, emailThreads, userPreferences, aiChatHistory,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, ilike, desc, asc, inArray, ne, not, like, sql, isNotNull, count } from "drizzle-orm";
+import { eq, and, or, ilike, desc, asc, inArray, ne, not, like, sql, isNotNull } from "drizzle-orm";
 
 type EmailUpdates = Partial<Pick<Email, "read" | "starred" | "folder" | "labels" | "to" | "toEmail" | "cc" | "bcc" | "subject" | "body" | "preview" | "aiSummary" | "aiCategory" | "aiUrgency" | "aiSuggestedAction" | "aiDraftReply" | "aiSpamScore" | "aiSpamReason" | "aiProcessed" | "threadId" | "threadSubject" | "threadPosition">>;
 
@@ -62,32 +62,30 @@ export interface IStorage {
   deleteCustomFolder(id: string, userId: string): Promise<boolean>;
 
   // FinOps
-  getFinancialDocuments(userId: string, filters?: { status?: string; emailId?: string }, limit?: number): Promise<FinancialDocument[]>;
-  getFinancialDocumentCount(userId: string, status?: string): Promise<number>;
+  getFinancialDocuments(userId: string, filters?: { status?: string; emailId?: string }): Promise<FinancialDocument[]>;
   getFinancialDocument(id: string, userId: string): Promise<FinancialDocument | undefined>;
   getFinancialDocumentByEmail(emailId: string, userId: string): Promise<FinancialDocument | undefined>;
   createFinancialDocument(data: InsertFinancialDocument): Promise<FinancialDocument>;
   updateFinancialDocument(id: string, userId: string, updates: Partial<FinancialDocument>): Promise<FinancialDocument | undefined>;
 
   // Calendar
-  getCalendarEvents(userId: string, start?: Date, end?: Date, limit?: number): Promise<CalendarEvent[]>;
-  getCalendarEventCount(userId: string): Promise<number>;
+  getCalendarEvents(userId: string, start?: Date, end?: Date): Promise<CalendarEvent[]>;
   getCalendarEvent(id: string, userId: string): Promise<CalendarEvent | undefined>;
   createCalendarEvent(data: InsertCalendarEvent): Promise<CalendarEvent>;
   updateCalendarEvent(id: string, userId: string, updates: Partial<CalendarEvent>): Promise<CalendarEvent | undefined>;
   deleteCalendarEvent(id: string, userId: string): Promise<boolean>;
   getCalendarParticipants(eventId: string): Promise<CalendarParticipant[]>;
-  getCalendarParticipantsByEventIds(eventIds: string[]): Promise<CalendarParticipant[]>;
   createCalendarParticipant(data: InsertCalendarParticipant): Promise<CalendarParticipant>;
+  createCalendarParticipantsBatch(data: InsertCalendarParticipant[]): Promise<CalendarParticipant[]>;
   getTimezoneConflicts(userId: string, resolved?: boolean): Promise<TimezoneConflict[]>;
   createTimezoneConflict(data: InsertTimezoneConflict): Promise<TimezoneConflict>;
+  createTimezoneConflictsBatch(data: InsertTimezoneConflict[]): Promise<TimezoneConflict[]>;
   updateTimezoneConflict(id: string, userId: string, updates: Partial<TimezoneConflict>): Promise<TimezoneConflict | undefined>;
   getAvailabilitySlots(userId: string): Promise<AvailabilitySlot[]>;
   setAvailabilitySlots(userId: string, slots: InsertAvailabilitySlot[]): Promise<AvailabilitySlot[]>;
 
   // Quarantine
-  getQuarantineActions(userId: string, limit?: number): Promise<QuarantineAction[]>;
-  getQuarantineCount(userId: string, releaseStatus?: string): Promise<number>;
+  getQuarantineActions(userId: string): Promise<QuarantineAction[]>;
   getQuarantineAction(emailId: string, userId: string): Promise<QuarantineAction | undefined>;
   createQuarantineAction(data: InsertQuarantineAction): Promise<QuarantineAction>;
   updateQuarantineAction(id: string, userId: string, updates: Partial<QuarantineAction>): Promise<QuarantineAction | undefined>;
@@ -312,13 +310,12 @@ export class DatabaseStorage implements IStorage {
     return counts;
   }
 
-  async getUnprocessedEmails(userId: string, limit: number = 50): Promise<Email[]> {
+  async getUnprocessedEmails(userId: string): Promise<Email[]> {
     return db
       .select()
       .from(emails)
       .where(and(eq(emails.userId, userId), eq(emails.aiProcessed, false)))
-      .orderBy(desc(emails.timestamp))
-      .limit(limit);
+      .orderBy(desc(emails.timestamp));
   }
 
   async getAgentActivity(userId: string): Promise<AgentActivity[]> {
@@ -412,18 +409,11 @@ export class DatabaseStorage implements IStorage {
 
   // ─── FinOps ─────────────────────────────────────────────────────────────────
 
-  async getFinancialDocuments(userId: string, filters?: { status?: string; emailId?: string }, limit: number = 100): Promise<FinancialDocument[]> {
+  async getFinancialDocuments(userId: string, filters?: { status?: string; emailId?: string }): Promise<FinancialDocument[]> {
     const conditions = [eq(financialDocuments.userId, userId)];
     if (filters?.status) conditions.push(eq(financialDocuments.status, filters.status));
     if (filters?.emailId) conditions.push(eq(financialDocuments.emailId, filters.emailId));
-    return db.select().from(financialDocuments).where(and(...conditions)).orderBy(desc(financialDocuments.createdAt)).limit(limit);
-  }
-
-  async getFinancialDocumentCount(userId: string, status?: string): Promise<number> {
-    const conditions = [eq(financialDocuments.userId, userId)];
-    if (status) conditions.push(eq(financialDocuments.status, status));
-    const [result] = await db.select({ count: count() }).from(financialDocuments).where(and(...conditions));
-    return Number(result.count);
+    return db.select().from(financialDocuments).where(and(...conditions)).orderBy(desc(financialDocuments.createdAt));
   }
 
   async getFinancialDocument(id: string, userId: string): Promise<FinancialDocument | undefined> {
@@ -453,16 +443,11 @@ export class DatabaseStorage implements IStorage {
 
   // ─── Calendar ───────────────────────────────────────────────────────────────
 
-  async getCalendarEvents(userId: string, start?: Date, end?: Date, limit: number = 100): Promise<CalendarEvent[]> {
+  async getCalendarEvents(userId: string, start?: Date, end?: Date): Promise<CalendarEvent[]> {
     const conditions = [eq(calendarEvents.userId, userId)];
     if (start) conditions.push(sql`${calendarEvents.endTime} >= ${start}`);
     if (end) conditions.push(sql`${calendarEvents.startTime} <= ${end}`);
-    return db.select().from(calendarEvents).where(and(...conditions)).orderBy(asc(calendarEvents.startTime)).limit(limit);
-  }
-
-  async getCalendarEventCount(userId: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(calendarEvents).where(eq(calendarEvents.userId, userId));
-    return Number(result.count);
+    return db.select().from(calendarEvents).where(and(...conditions)).orderBy(asc(calendarEvents.startTime));
   }
 
   async getCalendarEvent(id: string, userId: string): Promise<CalendarEvent | undefined> {
@@ -494,14 +479,14 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(calendarParticipants).where(eq(calendarParticipants.eventId, eventId));
   }
 
-  async getCalendarParticipantsByEventIds(eventIds: string[]): Promise<CalendarParticipant[]> {
-    if (eventIds.length === 0) return [];
-    return db.select().from(calendarParticipants).where(inArray(calendarParticipants.eventId, eventIds));
-  }
-
   async createCalendarParticipant(data: InsertCalendarParticipant): Promise<CalendarParticipant> {
     const [p] = await db.insert(calendarParticipants).values(data).returning();
     return p;
+  }
+
+  async createCalendarParticipantsBatch(data: InsertCalendarParticipant[]): Promise<CalendarParticipant[]> {
+    if (data.length === 0) return [];
+    return db.insert(calendarParticipants).values(data).returning();
   }
 
   async getTimezoneConflicts(userId: string, resolved?: boolean): Promise<TimezoneConflict[]> {
@@ -513,6 +498,11 @@ export class DatabaseStorage implements IStorage {
   async createTimezoneConflict(data: InsertTimezoneConflict): Promise<TimezoneConflict> {
     const [c] = await db.insert(timezoneConflicts).values(data).returning();
     return c;
+  }
+
+  async createTimezoneConflictsBatch(data: InsertTimezoneConflict[]): Promise<TimezoneConflict[]> {
+    if (data.length === 0) return [];
+    return db.insert(timezoneConflicts).values(data).returning();
   }
 
   async updateTimezoneConflict(id: string, userId: string, updates: Partial<TimezoneConflict>): Promise<TimezoneConflict | undefined> {
@@ -528,25 +518,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setAvailabilitySlots(userId: string, slots: InsertAvailabilitySlot[]): Promise<AvailabilitySlot[]> {
-    return db.transaction(async (tx) => {
-      await tx.delete(availabilitySlots).where(eq(availabilitySlots.userId, userId));
-      if (slots.length === 0) return [];
-      return tx.insert(availabilitySlots).values(slots).returning();
-    });
+    await db.delete(availabilitySlots).where(eq(availabilitySlots.userId, userId));
+    if (slots.length === 0) return [];
+    return db.insert(availabilitySlots).values(slots).returning();
   }
 
   // ─── Quarantine ─────────────────────────────────────────────────────────────
 
-  async getQuarantineActions(userId: string, limit: number = 100): Promise<QuarantineAction[]> {
+  async getQuarantineActions(userId: string): Promise<QuarantineAction[]> {
     return db.select().from(quarantineActions)
-      .where(eq(quarantineActions.userId, userId)).orderBy(desc(quarantineActions.createdAt)).limit(limit);
-  }
-
-  async getQuarantineCount(userId: string, releaseStatus?: string): Promise<number> {
-    const conditions = [eq(quarantineActions.userId, userId)];
-    if (releaseStatus) conditions.push(eq(quarantineActions.releaseStatus, releaseStatus));
-    const [result] = await db.select({ count: count() }).from(quarantineActions).where(and(...conditions));
-    return Number(result.count);
+      .where(eq(quarantineActions.userId, userId)).orderBy(desc(quarantineActions.createdAt));
   }
 
   async getQuarantineAction(emailId: string, userId: string): Promise<QuarantineAction | undefined> {

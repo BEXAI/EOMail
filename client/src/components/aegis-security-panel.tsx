@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { QuarantineAction } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
-import { DEMO_QUARANTINE_ACTIONS } from "@/lib/demo-data";
+import { useDemoData } from "@/hooks/use-demo-data";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,18 +33,22 @@ interface AegisSecurityPanelProps {
 export function AegisSecurityPanel({ isDemo }: AegisSecurityPanelProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const demoData = useDemoData(isDemo);
 
   const { data: liveQuarantine = [], isLoading } = useQuery<QuarantineAction[]>({
     queryKey: ["/api/security/quarantine"],
     enabled: !isDemo,
   });
 
-  const quarantine = isDemo ? DEMO_QUARANTINE_ACTIONS : liveQuarantine;
+  const quarantine = isDemo ? (demoData?.DEMO_QUARANTINE_ACTIONS ?? []) : liveQuarantine;
+
+  const [releasingId, setReleasingId] = useState<string | null>(null);
 
   const releaseMutation = useMutation({
     mutationFn: async (emailId: string) => {
       await apiRequest("POST", `/api/security/quarantine/${emailId}/release`);
     },
+    onMutate: (emailId) => { setReleasingId(emailId); },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/security/quarantine"] });
       queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
@@ -53,6 +58,7 @@ export function AegisSecurityPanel({ isDemo }: AegisSecurityPanelProps) {
     onError: () => {
       toast({ title: "Failed to release email", description: "Please try again.", variant: "destructive" });
     },
+    onSettled: () => { setReleasingId(null); },
   });
 
   const quarantined = quarantine.filter((q) => q.releaseStatus === "quarantined");
@@ -121,7 +127,7 @@ export function AegisSecurityPanel({ isDemo }: AegisSecurityPanelProps) {
               key={action.id}
               action={action}
               onRelease={() => releaseMutation.mutate(action.emailId)}
-              isReleasing={releaseMutation.isPending}
+              isReleasing={releasingId === action.emailId}
               isDemo={isDemo}
             />
           ))

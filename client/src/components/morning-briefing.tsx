@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type Email } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
-import { DEMO_BRIEFING } from "@/lib/demo-data";
+import { useDemoData } from "@/hooks/use-demo-data";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,6 +41,7 @@ const agentIcons: Record<string, { icon: typeof DollarSign; color: string; bgCol
 
 export function MorningBriefing({ userName, emails, onSelectEmail, isDemo }: MorningBriefingProps) {
   const queryClient = useQueryClient();
+  const demoData = useDemoData(isDemo);
   const firstName = userName?.split(" ")[0] || "there";
 
   const { data: liveBriefingData, isLoading: liveBriefingLoading } = useQuery<BriefingData>({
@@ -48,7 +49,7 @@ export function MorningBriefing({ userName, emails, onSelectEmail, isDemo }: Mor
     enabled: !isDemo,
   });
 
-  const briefingData = isDemo ? DEMO_BRIEFING : liveBriefingData;
+  const briefingData = isDemo ? (demoData?.DEMO_BRIEFING ?? null) : liveBriefingData;
   const briefingLoading = isDemo ? false : liveBriefingLoading;
 
   const processAllMutation = useMutation({

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type AgentActivity, type CustomFolder } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
-import { DEMO_AGENT_ACTIVITY, DEMO_CUSTOM_FOLDERS } from "@/lib/demo-data";
+import { useDemoData } from "@/hooks/use-demo-data";
 import logoPath from "@assets/912AF931-1EA4-4CC4-8976-8C6D0557A5A5_1_105_c_1772859976130.jpeg";
 import {
   Sidebar,
@@ -118,6 +118,7 @@ const folderColorMap: Record<string, string> = {
 };
 
 function ActiveAgentsSection({ isDemo }: { isDemo?: boolean }) {
+  const demoData = useDemoData(isDemo);
   const { data: liveActivities = [] } = useQuery<AgentActivity[]>({
     queryKey: ["/api/ai/activity"],
     enabled: !isDemo,
@@ -128,7 +129,7 @@ function ActiveAgentsSection({ isDemo }: { isDemo?: boolean }) {
     },
   });
 
-  const activities = isDemo ? DEMO_AGENT_ACTIVITY : liveActivities;
+  const activities = isDemo ? (demoData?.DEMO_AGENT_ACTIVITY ?? []) : liveActivities;
   const recent = activities.slice(0, 8);
   const pendingCount = activities.filter((a) => a.status === "pending").length;
 
@@ -214,12 +215,13 @@ function CustomFoldersSection({
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
 
+  const demoData = useDemoData(isDemo);
   const { data: liveFolders = [] } = useQuery<CustomFolder[]>({
     queryKey: ["/api/folders"],
     enabled: !isDemo,
   });
 
-  const customFoldersList = isDemo ? DEMO_CUSTOM_FOLDERS : liveFolders;
+  const customFoldersList = isDemo ? (demoData?.DEMO_CUSTOM_FOLDERS ?? []) : liveFolders;
 
   const autoOrganizeMutation = useMutation({
     mutationFn: async () => {

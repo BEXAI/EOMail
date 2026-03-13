@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import DOMPurify from "dompurify";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { formatMessage as rawFormatMessage } from "@/lib/format-message";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -36,8 +35,21 @@ const QUICK_ACTIONS = [
   { label: "Inbox briefing", icon: Sparkles, prompt: "Give me a full AI summary briefing on my inbox status, priorities, and recommended actions." },
 ];
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function formatMessage(content: string): string {
-  return DOMPurify.sanitize(rawFormatMessage(content));
+  const escaped = escapeHtml(content);
+  let html = escaped
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/`([^`]+)`/g, "<code class='bg-muted px-1 py-0.5 rounded text-xs font-mono'>$1</code>")
+    .replace(/^• (.+)$/gm, "<li class='ml-4 list-disc'>$1</li>")
+    .replace(/^- (.+)$/gm, "<li class='ml-4 list-disc'>$1</li>")
+    .replace(/^(\d+)\. (.+)$/gm, "<li class='ml-4 list-decimal'>$1. $2</li>")
+    .replace(/\n/g, "<br/>");
+  return DOMPurify.sanitize(html);
 }
 
 export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiChatPanelProps) {
@@ -144,10 +156,10 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
           className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 shadow-2xl shadow-violet-900/40 hover:shadow-violet-700/60 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center group"
           data-testid="button-ai-chat-fab"
         >
-          <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl" />
+          <div className="absolute inset-0 bg-foreground/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl" />
           <div className="relative">
             <MessageSquare className="w-7 h-7 text-white group-hover:scale-110 transition-transform" />
-            <span className="absolute -top-3 -right-3 px-1.5 py-0.5 bg-emerald-400 text-black text-[8px] font-black rounded-full border-4 border-[#0a0a0f] animate-pulse">LIVE</span>
+            <span className="absolute -top-3 -right-3 px-1.5 py-0.5 bg-emerald-400 text-black text-[8px] font-black rounded-full border-4 border-background animate-pulse">LIVE</span>
           </div>
         </button>
       )}
@@ -164,22 +176,22 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
         >
           <div className={cn(
             "relative flex flex-col h-full overflow-hidden",
-            "rounded-3xl border border-white/[0.12]",
-            "bg-[#0a0a0f]/98 backdrop-blur-3xl",
+            "rounded-3xl border border-border",
+            "bg-background/98 backdrop-blur-3xl",
             "shadow-[0_20px_50px_rgba(0,0,0,0.8)]"
           )}>
             <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.08] to-transparent pointer-events-none" />
 
-            <div className="relative flex items-center justify-between px-6 py-5 border-b border-white/[0.08] shrink-0">
+            <div className="relative flex items-center justify-between px-6 py-5 border-b border-border shrink-0">
               <div className="flex items-center gap-4">
                 <div className="relative group/bot">
                   <div className="absolute -inset-1.5 bg-gradient-to-tr from-violet-600 to-indigo-600 rounded-xl blur opacity-30 group-hover/bot:opacity-50 transition duration-300"></div>
-                  <div className="relative w-11 h-11 rounded-xl bg-[#11111a] border border-white/10 flex items-center justify-center shadow-xl">
-                    <Bot className="w-6 h-6 text-white" />
+                  <div className="relative w-11 h-11 rounded-xl bg-muted border border-border flex items-center justify-center shadow-xl">
+                    <Bot className="w-6 h-6 text-foreground" />
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-sm font-black tracking-widest text-white uppercase italic">
+                  <h3 className="text-sm font-black tracking-widest text-foreground uppercase italic">
                     Command Center
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
@@ -195,7 +207,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-8 w-8 text-white/30 hover:text-white/80 hover:bg-white/[0.08] rounded-xl transition-all"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-all"
                     onClick={clearChat}
                     data-testid="button-clear-chat"
                   >
@@ -205,7 +217,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-8 w-8 text-white/30 hover:text-white/80 hover:bg-white/[0.08] rounded-xl transition-all"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-all"
                   onClick={() => setIsFullscreen(!isFullscreen)}
                   data-testid="button-fullscreen-chat"
                 >
@@ -214,7 +226,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-8 w-8 text-white/30 hover:text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all ml-1"
+                  className="h-8 w-8 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all ml-1"
                   onClick={onToggle}
                   data-testid="button-close-chat"
                 >
@@ -223,18 +235,18 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
               </div>
             </div>
 
-            <div className="relative flex-1 overflow-y-auto px-6 py-6 space-y-6 scrollbar-thin scrollbar-thumb-white/[0.08] scrollbar-track-transparent">
+            <div className="relative flex-1 overflow-y-auto px-6 py-6 space-y-6 scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full gap-8">
                   <div className="relative px-8">
                     <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full opacity-20" />
                     <div className="relative flex flex-col items-center text-center space-y-4">
-                      <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-violet-500/10 to-indigo-600/10 border border-white/5 flex items-center justify-center shadow-2xl">
+                      <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-violet-500/10 to-indigo-600/10 border border-border flex items-center justify-center shadow-2xl">
                         <Sparkles className="w-10 h-10 text-violet-400" />
                       </div>
                       <div className="space-y-2">
-                        <h2 className="text-xl font-bold text-white tracking-tight">How can I assist you?</h2>
-                        <p className="text-sm text-white/40 max-w-[280px] leading-relaxed">
+                        <h2 className="text-xl font-bold text-foreground tracking-tight">How can I assist you?</h2>
+                        <p className="text-sm text-muted-foreground max-w-[280px] leading-relaxed">
                           Deploy agentic operations or analyze your private eomail.co communications.
                         </p>
                       </div>
@@ -246,11 +258,11 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
                       <button
                         key={action.label}
                         onClick={() => sendMessage(action.prompt)}
-                        className="flex flex-col items-start gap-2 p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 text-left group"
+                        className="flex flex-col items-start gap-2 p-3.5 rounded-2xl bg-muted/30 hover:bg-muted/60 border border-border hover:border-border/80 transition-all duration-200 text-left group"
                         data-testid={`button-quick-${action.label.toLowerCase().replace(/\s+/g, "-")}`}
                       >
                         <action.icon className="w-4 h-4 text-violet-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[11px] font-bold text-white/60 group-hover:text-white/90">{action.label}</span>
+                        <span className="text-[11px] font-bold text-muted-foreground group-hover:text-foreground">{action.label}</span>
                       </button>
                     ))}
                   </div>
@@ -269,8 +281,8 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
                     className={cn(
                       "max-w-[88%] text-[14px] leading-relaxed shadow-xl",
                       msg.role === "user"
-                        ? "bg-gradient-to-br from-violet-600 to-indigo-700 text-white rounded-2xl rounded-tr-none px-4 py-3 border border-white/10"
-                        : "bg-white/[0.05] text-white/90 border border-white/[0.08] rounded-2xl rounded-tl-none px-4 py-3"
+                        ? "bg-gradient-to-br from-violet-600 to-indigo-700 text-white rounded-2xl rounded-tr-none px-4 py-3 border border-violet-500/20"
+                        : "bg-muted/50 text-foreground border border-border rounded-2xl rounded-tl-none px-4 py-3"
                     )}
                   >
                     {msg.role === "assistant" && (
@@ -284,7 +296,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
                       </div>
                     )}
                     <div
-                      className="whitespace-pre-wrap break-words prose-invert font-medium [&_strong]:text-white [&_strong]:font-black [&_code]:bg-white/10 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_li]:my-1"
+                      className="whitespace-pre-wrap break-words font-medium [&_strong]:text-foreground [&_strong]:font-black [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_li]:my-1"
                       dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }}
                     />
                   </div>
@@ -293,13 +305,13 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
 
               {chatMutation.isPending && (
                 <div className="flex justify-start">
-                  <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl rounded-tl-none px-5 py-4 flex items-center gap-3">
+                  <div className="bg-muted/30 border border-border rounded-2xl rounded-tl-none px-5 py-4 flex items-center gap-3">
                     <div className="flex gap-1">
                       <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
                       <span className="w-1.5 h-1.5 bg-violet-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
                       <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
                     </div>
-                    <span className="text-xs font-bold text-white/30 uppercase tracking-widest">Synthesizing Inbox Intelligence...</span>
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Synthesizing Inbox Intelligence...</span>
                   </div>
                 </div>
               )}
@@ -307,15 +319,15 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="relative px-6 py-6 shrink-0 border-t border-white/[0.05] bg-[#0d0d15]/50">
-              <div className="flex items-end gap-3 bg-white/[0.03] border border-white/[0.08] rounded-2xl p-3 focus-within:border-primary/40 focus-within:bg-white/[0.06] transition-all duration-300 shadow-inner">
+            <div className="relative px-6 py-6 shrink-0 border-t border-border bg-card/50">
+              <div className="flex items-end gap-3 bg-muted/30 border border-border rounded-2xl p-3 focus-within:border-primary/40 focus-within:bg-muted/50 transition-all duration-300 shadow-inner">
                 <textarea
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Message your AI Assistant..."
-                  className="flex-1 bg-transparent border-0 outline-none text-[14px] text-white/90 placeholder:text-white/20 resize-none min-h-[24px] max-h-[140px] py-1 px-1 font-medium"
+                  className="flex-1 bg-transparent border-0 outline-none text-[14px] text-foreground placeholder:text-muted-foreground resize-none min-h-[24px] max-h-[140px] py-1 px-1 font-medium"
                   rows={1}
                   data-testid="input-ai-chat"
                 />
@@ -325,7 +337,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
                     "h-9 w-9 shrink-0 rounded-xl transition-all duration-300",
                     input.trim()
                       ? "bg-gradient-to-r from-violet-600 to-indigo-600 hover:scale-105 shadow-lg shadow-violet-900/40 text-white"
-                      : "bg-white/[0.03] text-white/10"
+                      : "bg-muted text-muted-foreground/30"
                   )}
                   onClick={() => sendMessage(input)}
                   disabled={!input.trim() || chatMutation.isPending}

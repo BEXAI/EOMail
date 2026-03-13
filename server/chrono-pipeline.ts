@@ -54,16 +54,14 @@ export async function processMeetingExtraction(
     const event = await storage.createCalendarEvent(eventData);
 
     if (meetingData.participants.length > 0) {
-      for (const p of meetingData.participants) {
-        const participantData: InsertCalendarParticipant = {
-          eventId: event.id,
-          email: p.email,
-          name: p.name,
-          status: "pending",
-          isOptional: p.isOptional || false,
-        };
-        await storage.createCalendarParticipant(participantData);
-      }
+      const participantRows: InsertCalendarParticipant[] = meetingData.participants.map((p) => ({
+        eventId: event.id,
+        email: p.email,
+        name: p.name,
+        status: "pending",
+        isOptional: p.isOptional || false,
+      }));
+      await storage.createCalendarParticipantsBatch(participantRows);
     }
 
     await detectTimezoneConflicts(event.id, userId, startTime, endTime, meetingData.timezone);
@@ -131,16 +129,16 @@ async function detectTimezoneConflicts(
       }
     }
 
-    for (const conflict of conflicts) {
-      const data: InsertTimezoneConflict = {
+    if (conflicts.length > 0) {
+      const conflictRows: InsertTimezoneConflict[] = conflicts.map((c) => ({
         eventId,
         userId,
-        conflictType: conflict.type,
-        severity: conflict.severity,
-        details: conflict.details,
+        conflictType: c.type,
+        severity: c.severity,
+        details: c.details,
         resolved: false,
-      };
-      await storage.createTimezoneConflict(data);
+      }));
+      await storage.createTimezoneConflictsBatch(conflictRows);
     }
   } catch (error) {
     console.error("[Chrono] Timezone conflict detection failed:", error);

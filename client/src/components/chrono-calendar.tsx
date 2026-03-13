@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CalendarEvent, CalendarParticipant, TimezoneConflict, AvailabilitySlot } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
-import { DEMO_CALENDAR_EVENTS, DEMO_TIMEZONE_CONFLICTS } from "@/lib/demo-data";
+import { useDemoData } from "@/hooks/use-demo-data";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,7 @@ interface ChronoCalendarProps {
 export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const demoData = useDemoData(isDemo);
 
   const { data: liveEvents = [], isLoading: eventsLoading } = useQuery<(CalendarEvent & { participants?: CalendarParticipant[] })[]>({
     queryKey: ["/api/calendar/events"],
@@ -41,14 +42,18 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
     enabled: !isDemo,
   });
 
-  const events = isDemo ? DEMO_CALENDAR_EVENTS : liveEvents;
-  const conflicts = isDemo ? DEMO_TIMEZONE_CONFLICTS : liveConflicts;
+  const events = isDemo ? (demoData?.DEMO_CALENDAR_EVENTS ?? []) : liveEvents;
+  const conflicts = isDemo ? (demoData?.DEMO_TIMEZONE_CONFLICTS ?? []) : liveConflicts;
   const unresolvedConflicts = conflicts.filter((c) => !c.resolved);
+
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
 
   const deleteEventMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/calendar/events/${id}`);
     },
+    onMutate: (id) => { setDeletingEventId(id); },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/events"] });
       toast({ title: "Event deleted" });
@@ -56,12 +61,14 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
     onError: () => {
       toast({ title: "Failed to delete event", description: "Please try again.", variant: "destructive" });
     },
+    onSettled: () => { setDeletingEventId(null); },
   });
 
   const resolveConflictMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("PATCH", `/api/calendar/conflicts/${id}`, { resolved: true });
     },
+    onMutate: (id) => { setResolvingConflictId(id); },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/conflicts"] });
       toast({ title: "Conflict resolved" });
@@ -69,6 +76,7 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
     onError: () => {
       toast({ title: "Failed to resolve conflict", description: "Please try again.", variant: "destructive" });
     },
+    onSettled: () => { setResolvingConflictId(null); },
   });
 
   if (eventsLoading) {
@@ -131,7 +139,7 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
                   key={event.id}
                   event={event}
                   onDelete={() => deleteEventMutation.mutate(event.id)}
-                  isDeleting={deleteEventMutation.isPending}
+                  isDeleting={deletingEventId === event.id}
                   isDemo={isDemo}
                 />
               ))
@@ -151,7 +159,7 @@ export function ChronoCalendar({ isDemo }: ChronoCalendarProps) {
                   key={conflict.id}
                   conflict={conflict}
                   onResolve={() => resolveConflictMutation.mutate(conflict.id)}
-                  isResolving={resolveConflictMutation.isPending}
+                  isResolving={resolvingConflictId === conflict.id}
                   isDemo={isDemo}
                 />
               ))

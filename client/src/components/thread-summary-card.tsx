@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Email, EmailThread } from "@shared/schema";
-import { DEMO_THREAD_SUMMARIES, DEMO_EMAILS } from "@/lib/demo-data";
+import { useDemoData } from "@/hooks/use-demo-data";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,14 +29,15 @@ interface ThreadResponse {
 
 export function ThreadSummaryCard({ threadId, isDemo }: ThreadSummaryCardProps) {
   const [showFullThread, setShowFullThread] = useState(false);
+  const demoData = useDemoData(isDemo);
 
   const { data: liveThread, isLoading } = useQuery<ThreadResponse>({
     queryKey: ["/api/threads", threadId],
     enabled: !isDemo && !!threadId,
   });
 
-  const demoSummary = DEMO_THREAD_SUMMARIES.find((t) => t.id === threadId) || null;
-  const demoEmails = DEMO_EMAILS.filter((e) => e.threadId === threadId)
+  const demoSummary = demoData?.DEMO_THREAD_SUMMARIES.find((t) => t.id === threadId) || null;
+  const demoEmails = (demoData?.DEMO_EMAILS ?? []).filter((e) => e.threadId === threadId)
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   const summary = isDemo ? demoSummary : liveThread?.summary;

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { type Email } from "@shared/schema";
@@ -42,15 +42,24 @@ import {
 } from "@/components/ui/tooltip";
 import { useEmailActions } from "@/hooks/use-email-actions";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
-import { getDemoEmails, DEMO_COUNTS, DEMO_USER } from "@/lib/demo-data";
-import { FOLDER_LABELS } from "@/lib/constants";
+import { useDemoData } from "@/hooks/use-demo-data";
+
+const FOLDER_LABELS: Record<string, string> = {
+  inbox: "Inbox",
+  starred: "Starred",
+  sent: "Sent",
+  drafts: "Drafts",
+  "pending-approvals": "Pending Approvals",
+  archive: "Archive",
+  spam: "Spam",
+  trash: "Trash",
+  all: "All Mail",
+  finops: "FinOps Dashboard",
+  calendar: "Calendar",
+  security: "Security Dashboard",
+};
 
 const VIRTUAL_FOLDERS = new Set(["finops", "calendar", "security"]);
-
-const SIDEBAR_STYLE = {
-  "--sidebar-width": "15rem",
-  "--sidebar-width-icon": "3rem",
-} as React.CSSProperties;
 
 export default function MailPage() {
   const [folder, setFolder] = useState<string>("inbox");
@@ -63,14 +72,12 @@ export default function MailPage() {
   const [searchInput, setSearchInput] = useState("");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    return () => { if (undoTimer) clearTimeout(undoTimer); };
-  }, [undoTimer]);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user, isDemoMode, logoutMutation } = useAuth();
+  const demoData = useDemoData(isDemoMode);
   const [, setLocation] = useLocation();
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -95,10 +102,10 @@ export default function MailPage() {
     enabled: !!user,
   });
 
-  const demoEmails = useMemo(() => getDemoEmails(folder), [folder]);
+  const demoEmails = useMemo(() => demoData?.getDemoEmails(folder) ?? [], [demoData, folder]);
   const emails = isDemoMode ? demoEmails : liveEmails;
   const emailsLoading = isDemoMode ? false : liveEmailsLoading;
-  const counts = isDemoMode ? DEMO_COUNTS : liveCounts;
+  const counts = isDemoMode ? (demoData?.DEMO_COUNTS ?? {}) : liveCounts;
 
   const invalidateAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
@@ -405,6 +412,11 @@ export default function MailPage() {
     setCommandBarOpen,
   });
 
+  const sidebarStyle = {
+    "--sidebar-width": "15rem",
+    "--sidebar-width-icon": "3rem",
+  };
+
   const headerTitle = labelFilter
     ? `Label: ${labelFilter.charAt(0).toUpperCase() + labelFilter.slice(1)}`
     : folder.startsWith("custom:")
@@ -419,16 +431,16 @@ export default function MailPage() {
     return false;
   };
 
-  const emailActions = useMemo(() => ({
+  const emailActions = {
     onStar: (id: string, starred: boolean) => { if (!demoGuard()) starMutation.mutate({ id, starred }); },
     onDelete: (id: string) => { if (!demoGuard()) deleteMutation.mutate(id); },
     onMarkRead: (id: string, read: boolean) => { if (!demoGuard()) markReadMutation.mutate({ id, read }); },
     onMove: (id: string, targetFolder: string) => { if (!demoGuard()) moveMutation.mutate({ id, targetFolder }); },
     onArchive: (id: string) => { if (!demoGuard()) archiveMutation.mutate(id); },
-  }), [isDemoMode, starMutation, deleteMutation, markReadMutation, moveMutation, archiveMutation]);
+  };
 
   return (
-    <SidebarProvider style={SIDEBAR_STYLE}>
+    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex w-full bg-background overflow-hidden h-screen">
         <AppSidebar
           onCompose={handleCompose}
@@ -437,10 +449,10 @@ export default function MailPage() {
           onFolderChange={handleFolderChange}
           activeLabel={labelFilter}
           onLabelFilter={handleLabelFilter}
-          userName={user?.displayName || (isDemoMode ? DEMO_USER.displayName : undefined)}
-          userEmail={user?.email || (isDemoMode ? DEMO_USER.email : undefined)}
-          userInitials={user?.avatarInitials || (isDemoMode ? DEMO_USER.avatarInitials : undefined)}
-          mailboxAddress={user?.mailboxAddress || (isDemoMode ? DEMO_USER.mailboxAddress : undefined)}
+          userName={user?.displayName || (isDemoMode ? demoData?.DEMO_USER.displayName : undefined)}
+          userEmail={user?.email || (isDemoMode ? demoData?.DEMO_USER.email : undefined)}
+          userInitials={user?.avatarInitials || (isDemoMode ? demoData?.DEMO_USER.avatarInitials : undefined)}
+          mailboxAddress={user?.mailboxAddress || (isDemoMode ? demoData?.DEMO_USER.mailboxAddress : undefined)}
           isDemo={isDemoMode}
         />
 
@@ -612,7 +624,7 @@ export default function MailPage() {
                 {!selectedEmail && (
                   <div className="hidden md:flex flex-1 overflow-hidden">
                     <MorningBriefing
-                      userName={user?.displayName || (isDemoMode ? DEMO_USER.displayName : undefined)}
+                      userName={user?.displayName || (isDemoMode ? demoData?.DEMO_USER.displayName : undefined)}
                       emails={emails}
                       onSelectEmail={handleSelectEmail}
                       isDemo={isDemoMode}

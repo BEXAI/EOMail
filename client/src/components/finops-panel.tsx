@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FinancialDocument } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
-import { DEMO_FINANCIAL_DOCUMENTS } from "@/lib/demo-data";
+import { useDemoData } from "@/hooks/use-demo-data";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +42,7 @@ const statusColors: Record<string, { bg: string; text: string }> = {
 export function FinOpsPanel({ isDemo }: FinOpsPanelProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const demoData = useDemoData(isDemo);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const { data: liveDocs = [], isLoading } = useQuery<FinancialDocument[]>({
@@ -49,12 +50,16 @@ export function FinOpsPanel({ isDemo }: FinOpsPanelProps) {
     enabled: !isDemo,
   });
 
-  const docs = isDemo ? DEMO_FINANCIAL_DOCUMENTS : liveDocs;
+  const docs = isDemo ? (demoData?.DEMO_FINANCIAL_DOCUMENTS ?? []) : liveDocs;
+
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
 
   const confirmMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("PATCH", `/api/finance/documents/${id}`, { status: "confirmed" });
     },
+    onMutate: (id) => { setConfirmingId(id); },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/finance/documents"] });
       toast({ title: "Document confirmed" });
@@ -62,12 +67,14 @@ export function FinOpsPanel({ isDemo }: FinOpsPanelProps) {
     onError: () => {
       toast({ title: "Failed to confirm document", description: "Please try again.", variant: "destructive" });
     },
+    onSettled: () => { setConfirmingId(null); },
   });
 
   const rejectMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("PATCH", `/api/finance/documents/${id}`, { status: "rejected" });
     },
+    onMutate: (id) => { setRejectingId(id); },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/finance/documents"] });
       toast({ title: "Document rejected" });
@@ -75,6 +82,7 @@ export function FinOpsPanel({ isDemo }: FinOpsPanelProps) {
     onError: () => {
       toast({ title: "Failed to reject document", description: "Please try again.", variant: "destructive" });
     },
+    onSettled: () => { setRejectingId(null); },
   });
 
   const filtered = statusFilter === "all" ? docs : docs.filter((d) => d.status === statusFilter);
@@ -159,8 +167,8 @@ export function FinOpsPanel({ isDemo }: FinOpsPanelProps) {
               doc={doc}
               onConfirm={() => confirmMutation.mutate(doc.id)}
               onReject={() => rejectMutation.mutate(doc.id)}
-              isConfirming={confirmMutation.isPending}
-              isRejecting={rejectMutation.isPending}
+              isConfirming={confirmingId === doc.id}
+              isRejecting={rejectingId === doc.id}
               isDemo={isDemo}
             />
           ))

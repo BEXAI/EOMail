@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, type UseMutationResult } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -21,9 +21,9 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   isDemoMode: boolean;
-  loginMutation: any;
-  registerMutation: any;
-  logoutMutation: any;
+  loginMutation: UseMutationResult<AuthUser, Error, { username: string; password: string }>;
+  registerMutation: UseMutationResult<AuthUser, Error, { username: string; password: string; displayName: string }>;
+  logoutMutation: UseMutationResult<void, Error, void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);

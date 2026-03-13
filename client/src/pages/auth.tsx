@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import type { UseMutationResult } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,10 @@ export default function AuthPage() {
   );
 }
 
-function LoginForm({ loginMutation }: { loginMutation: any }) {
+interface LoginData { username: string; password: string }
+interface RegisterData { username: string; password: string; displayName: string }
+
+function LoginForm({ loginMutation }: { loginMutation: UseMutationResult<unknown, Error, LoginData> }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -127,7 +131,7 @@ function LoginForm({ loginMutation }: { loginMutation: any }) {
   );
 }
 
-function RegisterForm({ registerMutation }: { registerMutation: any }) {
+function RegisterForm({ registerMutation }: { registerMutation: UseMutationResult<unknown, Error, RegisterData> }) {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
