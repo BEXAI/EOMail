@@ -23,9 +23,9 @@ export default function VerifyEmailPage() {
 
     apiRequest("POST", "/api/auth/verify-email", { token })
       .then(() => setStatus("success"))
-      .catch((err: any) => {
+      .catch((err: unknown) => {
         setStatus("error");
-        setErrorMessage(err.message || "Verification failed");
+        setErrorMessage((err instanceof Error && err.message) || "Verification failed");
       });
   }, [token]);
 

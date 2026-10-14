@@ -228,7 +228,7 @@ function CustomFoldersSection({
       const res = await apiRequest("POST", "/api/ai/auto-organize");
       return res.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { organized: number; stats?: Record<string, number> }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
       queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });

@@ -15,7 +15,7 @@ export function registerSettingsRoutes(app: Express): void {
     try {
       const prefs = await getUserPreferences(req.user!.id);
       res.json(prefs);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch preferences" });
     }
   });
@@ -26,7 +26,7 @@ export function registerSettingsRoutes(app: Express): void {
       if (!parsed.success) return res.status(400).json({ error: "Invalid preferences", details: parsed.error.issues });
       const updated = await setUserPreferences(req.user!.id, parsed.data);
       res.json(updated);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to update preferences" });
     }
   });

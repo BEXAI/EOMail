@@ -54,7 +54,7 @@ export function registerEmailRoutes(app: Express): void {
       const offset = (page - 1) * limit;
       const emails = await storage.getEmails(userId, folder, search, label, limit, offset);
       res.json(emails);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch emails" });
     }
   });
@@ -72,7 +72,7 @@ export function registerEmailRoutes(app: Express): void {
       counts.calendar = calendarCount;
       counts.security = securityCount;
       res.json(counts);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch counts" });
     }
   });
@@ -83,7 +83,7 @@ export function registerEmailRoutes(app: Express): void {
       const email = await storage.getEmail(req.params.id, userId);
       if (!email) return res.status(404).json({ error: "Email not found" });
       res.json(email);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch email" });
     }
   });
@@ -99,10 +99,10 @@ export function registerEmailRoutes(app: Express): void {
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
       if (parsed.data.folder === "sent" && parsed.data.toEmail) {
-        if (!(req.user as any).emailVerified) {
+        if (!req.user!.emailVerified) {
           return res.status(403).json({ error: "Please verify your email before sending messages" });
         }
-        const senderMailbox = (req.user as any).mailboxAddress || req.user!.email;
+        const senderMailbox = req.user!.mailboxAddress || req.user!.email;
         const result = await sendEmail({
           from: req.user!.displayName,
           fromEmail: senderMailbox,
@@ -121,7 +121,7 @@ export function registerEmailRoutes(app: Express): void {
       emailContextIndex.invalidate(userId);
       invalidateCache(`briefing:${userId}`);
       res.status(201).json(email);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to create email" });
     }
   });
@@ -136,7 +136,7 @@ export function registerEmailRoutes(app: Express): void {
       emailContextIndex.invalidate(userId);
       invalidateCache(`briefing:${userId}`);
       res.json(updated);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to update email" });
     }
   });
@@ -160,7 +160,7 @@ export function registerEmailRoutes(app: Express): void {
         return res.json(results);
       }
       res.status(400).json({ error: "Invalid action" });
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to perform bulk action" });
     }
   });
@@ -173,7 +173,7 @@ export function registerEmailRoutes(app: Express): void {
       emailContextIndex.invalidate(userId);
       invalidateCache(`briefing:${userId}`);
       res.json({ success: true });
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to delete email" });
     }
   });

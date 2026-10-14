@@ -15,15 +15,6 @@ import {
   X,
 } from "lucide-react";
 
-const categoryIcons: Record<string, string> = {
-  finance: "💰",
-  scheduling: "📅",
-  newsletter: "📰",
-  "action-required": "⚡",
-  social: "👋",
-  notification: "🔔",
-};
-
 export function LiquidUICard({ email, onArchive, onReply }: { email: Email; onArchive: (id: string) => void; onReply: (email: Email) => void; }) {
   const category = email.aiCategory;
   if (!category || !email.aiProcessed) return null;

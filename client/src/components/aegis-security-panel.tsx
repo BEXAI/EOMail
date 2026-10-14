@@ -19,7 +19,6 @@ import {
   ShieldAlert,
   ChevronDown,
   Unlock,
-  Trash2,
   Link2,
   Globe,
   Loader2,

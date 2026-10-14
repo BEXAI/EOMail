@@ -36,7 +36,7 @@ export function registerComposeRoutes(app: Express): void {
       const replyBody = `<p>${escapeHtml(email.aiDraftReply).replace(/\n/g, "</p><p>")}</p>`;
       const replySubject = `Re: ${email.subject}`;
 
-      const senderMailbox = (req.user as any).mailboxAddress || req.user!.email;
+      const senderMailbox = req.user!.mailboxAddress || req.user!.email;
       const mailResult = await sendEmail({
         from: req.user!.displayName,
         fromEmail: senderMailbox,
@@ -92,7 +92,7 @@ export function registerComposeRoutes(app: Express): void {
       emailContextIndex.invalidate(userId);
       invalidateCache(`briefing:${userId}`);
       res.json(updated);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to reject draft" });
     }
   });
@@ -127,7 +127,7 @@ export function registerComposeRoutes(app: Express): void {
       );
 
       res.json({ draft: expanded });
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to expand draft" });
     }
   });

@@ -1,18 +1,18 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { storage } from "../storage";
 import { requireAuth } from "../auth";
 import { processEmail, processAllUnprocessed, processThreadDigests } from "../ai-pipeline";
 import { generateBriefing, handleAiCommand, handleAiChat, type ChatMessage } from "../ai";
 import { emailContextIndex } from "../ai-context";
 import { getCache, setCache, invalidateCache } from "../cache";
-import { apiError, aiLimiter } from "./_shared";
+import { apiError } from "./_shared";
 
 function isAiBillingError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
   return msg.includes("credit balance") || msg.includes("billing") || msg.includes("purchase credits");
 }
 
-function aiErrorResponse(res: any, e: unknown, fallbackMsg: string) {
+function aiErrorResponse(res: Response, e: unknown, fallbackMsg: string) {
   const errMsg = e instanceof Error ? e.message : String(e);
   if (isAiBillingError(e)) {
     return res.status(503).json({ error: "AI service temporarily unavailable", code: "AI_BILLING" });
@@ -56,7 +56,7 @@ export function registerAiRoutes(app: Express): void {
     try {
       const userId = req.user!.id;
       const cacheKey = `briefing:${userId}`;
-      const cached = getCache<{ briefing: string, agentStats: any[] }>(cacheKey);
+      const cached = getCache<{ briefing: string, agentStats: { name: string; completed: number; pending: number }[] }>(cacheKey);
       if (cached) {
         return res.json(cached);
       }
@@ -100,7 +100,7 @@ export function registerAiRoutes(app: Express): void {
       const userId = req.user!.id;
       const activity = await storage.getAgentActivity(userId);
       res.json(activity);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch agent activity" });
     }
   });
@@ -160,7 +160,7 @@ export function registerAiRoutes(app: Express): void {
       const emailId = req.query.emailId as string | undefined;
       const history = await storage.getChatHistory(req.user!.id, emailId);
       res.json(history);
-    } catch (e) {
+    } catch {
       apiError(res, 500, "INTERNAL_ERROR", "Failed to fetch chat history");
     }
   });
@@ -170,7 +170,7 @@ export function registerAiRoutes(app: Express): void {
       const emailId = req.query.emailId as string | undefined;
       await storage.deleteChatHistory(req.user!.id, emailId);
       res.json({ success: true });
-    } catch (e) {
+    } catch {
       apiError(res, 500, "INTERNAL_ERROR", "Failed to delete chat history");
     }
   });

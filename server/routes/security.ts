@@ -9,7 +9,7 @@ export function registerSecurityRoutes(app: Express): void {
     try {
       const actions = await storage.getQuarantineActions(req.user!.id);
       res.json(actions);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch quarantine actions" });
     }
   });
@@ -28,7 +28,7 @@ export function registerSecurityRoutes(app: Express): void {
       await storage.updateEmail(emailId, userId, { folder: "inbox" });
       emailContextIndex.invalidate(userId);
       res.json({ success: true });
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to release email" });
     }
   });
@@ -40,7 +40,7 @@ export function registerSecurityRoutes(app: Express): void {
       if (!email) return apiError(res, 404, "NOT_FOUND", "Email not found");
       const logs = await storage.getThreatScanLogs(req.params.emailId, userId);
       res.json(logs);
-    } catch (e) {
+    } catch {
       apiError(res, 500, "INTERNAL_ERROR", "Failed to fetch scan logs");
     }
   });

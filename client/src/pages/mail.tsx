@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { type Email } from "@shared/schema";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -22,14 +22,12 @@ import {
   Search,
   RefreshCw,
   X,
-  SlidersHorizontal,
   Keyboard,
   Bot,
   LogIn,
   UserPlus,
   Sparkles,
 } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -68,7 +66,6 @@ export default function MailPage() {
   const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
-  const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user, isDemoMode, logoutMutation } = useAuth();
   const [, setLocation] = useLocation();

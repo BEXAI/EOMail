@@ -17,7 +17,7 @@ import {
   threatScanLogs, emailThreads, userPreferences, aiChatHistory,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, ilike, desc, asc, inArray, ne, not, like, sql, isNotNull, gte, lte } from "drizzle-orm";
+import { eq, and, or, ilike, desc, asc, inArray, ne, not, like, sql, isNotNull, gte, lte, type SQL, type AnyColumn } from "drizzle-orm";
 
 type EmailUpdates = Partial<Pick<Email, "read" | "starred" | "folder" | "labels" | "to" | "toEmail" | "cc" | "bcc" | "subject" | "body" | "preview" | "aiSummary" | "aiCategory" | "aiUrgency" | "aiSuggestedAction" | "aiDraftReply" | "aiSpamScore" | "aiSpamReason" | "aiProcessed" | "threadId" | "threadSubject" | "threadPosition">>;
 
@@ -230,7 +230,7 @@ export class DatabaseStorage implements IStorage {
     const ids = updates.map(u => u.id);
     const allKeys = new Set(updates.flatMap(u => Object.keys(u.values)));
 
-    const caseStatements: Record<string, any> = { id: emails.id };
+    const caseStatements: Record<string, SQL | AnyColumn> = { id: emails.id };
 
     for (const key of allKeys) {
       const col = emails[key as keyof typeof emails];
@@ -330,7 +330,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAgentActivity(id: string, userId: string, updates: Partial<AgentActivity>): Promise<AgentActivity | undefined> {
-    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates;
     const [activity] = await db
       .update(agentActivity)
       .set(safeUpdates)
@@ -431,7 +431,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateFinancialDocument(id: string, userId: string, updates: Partial<FinancialDocument>): Promise<FinancialDocument | undefined> {
-    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates;
     const [doc] = await db.update(financialDocuments).set(safeUpdates)
       .where(and(eq(financialDocuments.id, id), eq(financialDocuments.userId, userId))).returning();
     return doc;
@@ -465,7 +465,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateCalendarEvent(id: string, userId: string, updates: Partial<CalendarEvent>): Promise<CalendarEvent | undefined> {
-    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates;
     const [event] = await db.update(calendarEvents).set(safeUpdates)
       .where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, userId))).returning();
     return event;
@@ -516,7 +516,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTimezoneConflict(id: string, userId: string, updates: Partial<TimezoneConflict>): Promise<TimezoneConflict | undefined> {
-    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates;
     const [conflict] = await db.update(timezoneConflicts).set(safeUpdates)
       .where(and(eq(timezoneConflicts.id, id), eq(timezoneConflicts.userId, userId))).returning();
     return conflict;
@@ -563,7 +563,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateQuarantineAction(id: string, userId: string, updates: Partial<QuarantineAction>): Promise<QuarantineAction | undefined> {
-    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates;
     const [action] = await db.update(quarantineActions).set(safeUpdates)
       .where(and(eq(quarantineActions.id, id), eq(quarantineActions.userId, userId))).returning();
     return action;

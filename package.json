@@ -9,9 +9,11 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:fix": "npx tsx script/fix-schema-types.ts",
-    "db:push": "npm run db:fix && npx drizzle-kit push --force"
+    "db:push": "npm run db:fix && npx drizzle-kit push --force",
+    "lint": "eslint client/src server shared"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@radix-ui/react-avatar": "^1.1.4",
     "@radix-ui/react-checkbox": "^1.1.5",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -44,7 +46,6 @@
     "express-session": "^1.18.1",
     "helmet": "^8.1.0",
     "lucide-react": "^0.453.0",
-    "@anthropic-ai/sdk": "^0.39.0",
     "nanoid": "^5.1.6",
     "p-limit": "^7.3.0",
     "passport": "^0.7.0",
@@ -61,6 +62,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@replit/vite-plugin-cartographer": "^0.4.4",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
@@ -76,9 +78,13 @@
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.8",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^17.13.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.17",
     "typescript": "5.6.3",
+    "typescript-eslint": "^8.71.2",
     "vite": "^7.3.0"
   },
   "overrides": {

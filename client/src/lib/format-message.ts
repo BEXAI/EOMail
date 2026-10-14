@@ -10,7 +10,7 @@ export function escapeHtml(str: string): string {
 
 export function formatMessage(content: string): string {
   const escaped = escapeHtml(content);
-  let html = escaped
+  const html = escaped
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/`([^`]+)`/g, "<code class='bg-white/10 px-1 py-0.5 rounded text-xs font-mono'>$1</code>")

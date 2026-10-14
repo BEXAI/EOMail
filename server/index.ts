@@ -116,7 +116,7 @@ app.use((req, res, next) => {
 
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: { status?: number; statusCode?: number; message?: string }, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = status >= 500 ? "Internal Server Error" : (err.message || "Internal Server Error");
 

@@ -10,9 +10,9 @@ interface KeyboardShortcuts {
   handleReply: (email: Email) => void;
   handleSelectEmail: (email: Email | null) => void;
   closeCompose: () => void;
-  starMutation: UseMutationResult<any, Error, { id: string; starred: boolean }>;
-  archiveMutation: UseMutationResult<any, Error, string>;
-  deleteMutation: UseMutationResult<any, Error, string>;
+  starMutation: UseMutationResult<unknown, Error, { id: string; starred: boolean }>;
+  archiveMutation: UseMutationResult<unknown, Error, string>;
+  deleteMutation: UseMutationResult<unknown, Error, string>;
   searchRef: React.RefObject<HTMLInputElement>;
   setCommandBarOpen: (open: boolean) => void;
 }

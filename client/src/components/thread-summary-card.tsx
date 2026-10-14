@@ -116,7 +116,7 @@ export function ThreadSummaryCard({ threadId, isDemo }: ThreadSummaryCardProps) 
 
                 {showFullThread && (
                   <div className="mt-2 space-y-2 border-l-2 border-violet-500/20 ml-1 pl-3">
-                    {threadEmails.map((email, i) => (
+                    {threadEmails.map((email) => (
                       <div key={email.id} className="text-xs">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="font-semibold text-foreground">{email.from}</span>

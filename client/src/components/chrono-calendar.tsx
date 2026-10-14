@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { CalendarEvent, CalendarParticipant, TimezoneConflict, AvailabilitySlot } from "@shared/schema";
+import type { CalendarEvent, CalendarParticipant, TimezoneConflict } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useDemoData } from "@/hooks/use-demo-data";
 import { useToast } from "@/hooks/use-toast";

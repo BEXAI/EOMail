@@ -3,7 +3,7 @@ import { useQuery, useMutation, type UseMutationResult } from "@tanstack/react-q
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-interface AuthUser {
+export interface AuthUser {
   id: string;
   username: string;
   email: string;

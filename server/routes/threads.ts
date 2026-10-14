@@ -9,7 +9,7 @@ export function registerThreadRoutes(app: Express): void {
       const threadEmails = await storage.getEmailThread(req.params.threadId, userId);
       const summary = await storage.getThreadSummary(req.params.threadId, userId);
       res.json({ emails: threadEmails, summary });
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch thread" });
     }
   });

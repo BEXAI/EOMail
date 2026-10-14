@@ -36,8 +36,8 @@ export default function ResetPasswordPage() {
     try {
       await apiRequest("POST", "/api/auth/reset-password", { token, password });
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.message || "Something went wrong");
+    } catch (err) {
+      setError((err instanceof Error && err.message) || "Something went wrong");
     } finally {
       setIsPending(false);
     }

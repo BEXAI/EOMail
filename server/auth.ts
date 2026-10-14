@@ -2,14 +2,14 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { type Express } from "express";
+import { type Express, type Request, type Response, type NextFunction } from "express";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { storage } from "./storage";
 import { pool } from "./db";
 import { type User } from "@shared/schema";
-import { sendPasswordResetEmail, sendVerificationEmail } from "./email";
+import { sendPasswordResetEmail } from "./email";
 
 declare global {
   namespace Express {
@@ -230,9 +230,10 @@ export function setupAuth(app: Express) {
           res.status(201).json(safeUser);
         });
       });
-    } catch (err: any) {
-      if (err.code === "23505") {
-        const detail = err.detail || "";
+    } catch (err) {
+      const pgErr = err as { code?: string; detail?: string };
+      if (pgErr.code === "23505") {
+        const detail = pgErr.detail || "";
         if (detail.includes("email")) {
           return res.status(400).json({ message: "An account with this email already exists" });
         }
@@ -243,7 +244,7 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/auth/login", (req, res, next) => {
-    passport.authenticate("local", (err: any, user: Express.User | false, info: any) => {
+    passport.authenticate("local", (err: Error | null, user: Express.User | false, info?: { message?: string }) => {
       if (err) return next(err);
       if (!user) {
         return res.status(401).json({ message: info?.message || "Invalid credentials" });
@@ -431,7 +432,7 @@ export function setupAuth(app: Express) {
   });
 }
 
-export function requireAuth(req: any, res: any, next: any) {
+export function requireAuth<P>(req: Request<P>, res: Response, next: NextFunction) {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ message: "Authentication required" });
   }

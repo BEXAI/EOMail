@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod";
 import { storage } from "../storage";
+import { type CalendarEvent } from "@shared/schema";
 import { requireAuth } from "../auth";
 import { suggestOptimalTime } from "../ai";
 import { apiError, aiLimiter } from "./_shared";
@@ -53,7 +54,7 @@ export function registerCalendarRoutes(app: Express): void {
         participants: participantsMap.get(event.id) || [],
       }));
       res.json(eventsWithParticipants);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch calendar events" });
     }
   });
@@ -64,7 +65,7 @@ export function registerCalendarRoutes(app: Express): void {
       if (!event) return res.status(404).json({ error: "Event not found" });
       const participants = await storage.getCalendarParticipants(event.id);
       res.json({ ...event, participants });
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch event" });
     }
   });
@@ -85,7 +86,7 @@ export function registerCalendarRoutes(app: Express): void {
         status: parsed.data.status || "pending",
       });
       res.status(201).json(event);
-    } catch (e) {
+    } catch {
       apiError(res, 500, "INTERNAL_ERROR", "Failed to create event");
     }
   });
@@ -94,13 +95,16 @@ export function registerCalendarRoutes(app: Express): void {
     try {
       const parsed = calendarEventUpdateSchema.safeParse(req.body);
       if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid event update");
-      const updates: any = { ...parsed.data };
-      if (updates.startTime) updates.startTime = new Date(updates.startTime);
-      if (updates.endTime) updates.endTime = new Date(updates.endTime);
+      const { startTime, endTime, ...rest } = parsed.data;
+      const updates: Partial<CalendarEvent> = {
+        ...rest,
+        ...(startTime && { startTime: new Date(startTime) }),
+        ...(endTime && { endTime: new Date(endTime) }),
+      };
       const updated = await storage.updateCalendarEvent(req.params.id, req.user!.id, updates);
       if (!updated) return apiError(res, 404, "NOT_FOUND", "Event not found");
       res.json(updated);
-    } catch (e) {
+    } catch {
       apiError(res, 500, "INTERNAL_ERROR", "Failed to update event");
     }
   });
@@ -110,7 +114,7 @@ export function registerCalendarRoutes(app: Express): void {
       const deleted = await storage.deleteCalendarEvent(req.params.id, req.user!.id);
       if (!deleted) return res.status(404).json({ error: "Event not found" });
       res.json({ success: true });
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to delete event" });
     }
   });
@@ -119,7 +123,7 @@ export function registerCalendarRoutes(app: Express): void {
     try {
       const slots = await storage.getAvailabilitySlots(req.user!.id);
       res.json(slots);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch availability" });
     }
   });
@@ -141,7 +145,7 @@ export function registerCalendarRoutes(app: Express): void {
       }));
       const savedSlots = await storage.setAvailabilitySlots(userId, typedSlots);
       res.json(savedSlots);
-    } catch (e) {
+    } catch {
       apiError(res, 500, "INTERNAL_ERROR", "Failed to save availability");
     }
   });
@@ -151,7 +155,7 @@ export function registerCalendarRoutes(app: Express): void {
       const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
       const conflicts = await storage.getTimezoneConflicts(req.user!.id, resolved);
       res.json(conflicts);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch conflicts" });
     }
   });
@@ -160,10 +164,10 @@ export function registerCalendarRoutes(app: Express): void {
     try {
       const parsed = timezoneConflictUpdateSchema.safeParse(req.body);
       if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid conflict update");
-      const updated = await storage.updateTimezoneConflict(req.params.id, req.user!.id, parsed.data as any);
+      const updated = await storage.updateTimezoneConflict(req.params.id, req.user!.id, parsed.data);
       if (!updated) return apiError(res, 404, "NOT_FOUND", "Conflict not found");
       res.json(updated);
-    } catch (e) {
+    } catch {
       apiError(res, 500, "INTERNAL_ERROR", "Failed to update conflict");
     }
   });
@@ -184,7 +188,7 @@ export function registerCalendarRoutes(app: Express): void {
         constraints
       );
       res.json(result);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to suggest time" });
     }
   });

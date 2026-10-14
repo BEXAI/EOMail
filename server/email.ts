@@ -23,14 +23,14 @@ export async function sendEmail(opts: {
       ? `${opts.from} <${opts.fromEmail}>`
       : `${opts.from} <noreply@${DOMAIN}>`;
 
-    const payload: any = {
+    const payload: Parameters<typeof resend.emails.send>[0] = {
       from: fromAddress,
       to: [opts.to],
       subject: opts.subject,
       html: opts.html,
+      ...(opts.cc && { cc: opts.cc.split(",").map((e: string) => e.trim()).filter(Boolean) }),
+      ...(opts.bcc && { bcc: opts.bcc.split(",").map((e: string) => e.trim()).filter(Boolean) }),
     };
-    if (opts.cc) payload.cc = opts.cc.split(",").map((e: string) => e.trim()).filter(Boolean);
-    if (opts.bcc) payload.bcc = opts.bcc.split(",").map((e: string) => e.trim()).filter(Boolean);
 
     const { data, error } = await resend.emails.send(payload);
     if (error) {
@@ -38,9 +38,9 @@ export async function sendEmail(opts: {
       return { success: false, error: error.message };
     }
     return { success: true, messageId: data?.id };
-  } catch (e: any) {
+  } catch (e) {
     console.error("Email send error:", e);
-    return { success: false, error: e.message };
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 

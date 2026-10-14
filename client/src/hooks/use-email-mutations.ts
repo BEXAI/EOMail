@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { type ComposeData } from "@/components/compose-dialog";
-import { useLocation } from "wouter";
 import { type Email } from "@shared/schema";
 import { type AuthUser } from "@/hooks/use-auth";
 
@@ -17,7 +16,6 @@ export function useEmailMutations({
 }) {
     const queryClient = useQueryClient();
     const { toast } = useToast();
-    const [, setLocation] = useLocation();
 
     const invalidateAll = () => {
         queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
@@ -115,7 +113,7 @@ export function useEmailMutations({
 
     const bulkMutation = useMutation({
         mutationFn: async ({ ids, action }: { ids: string[]; action: string }) => {
-            const bulkUpdates: Record<string, { action: string; updates?: Record<string, any> }> = {
+            const bulkUpdates: Record<string, { action: string; updates?: Record<string, unknown> }> = {
                 delete: folder === "trash"
                     ? { action: "delete" }
                     : { action: "update", updates: { folder: "trash" } },

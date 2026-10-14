@@ -20,7 +20,7 @@ export function registerFolderRoutes(app: Express): void {
     try {
       const folders = await storage.getCustomFolders(req.user!.id);
       res.json(folders);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch folders" });
     }
   });
@@ -45,7 +45,7 @@ export function registerFolderRoutes(app: Express): void {
         color,
       });
       res.status(201).json(folder);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to create folder" });
     }
   });
@@ -55,7 +55,7 @@ export function registerFolderRoutes(app: Express): void {
       const deleted = await storage.deleteCustomFolder(req.params.id, req.user!.id);
       if (!deleted) return res.status(404).json({ error: "Folder not found" });
       res.json({ success: true });
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to delete folder" });
     }
   });

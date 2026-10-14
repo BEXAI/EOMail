@@ -1,5 +1,5 @@
 const MAX_CACHE_SIZE = 500;
-const cache = new Map<string, { value: any; expires: number }>();
+const cache = new Map<string, { value: unknown; expires: number }>();
 
 function evictExpired(): number {
   const now = Date.now();

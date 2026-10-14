@@ -25,7 +25,6 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Save, Loader2, LogOut, Shield, User, Sparkles, Calendar } from "lucide-react";

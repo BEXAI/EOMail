@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod";
 import { storage } from "../storage";
+import { type FinancialDocument } from "@shared/schema";
 import { requireAuth } from "../auth";
 import { apiError } from "./_shared";
 
@@ -20,7 +21,7 @@ export function registerFinopsRoutes(app: Express): void {
       const emailId = req.query.emailId as string | undefined;
       const docs = await storage.getFinancialDocuments(req.user!.id, { status, emailId });
       res.json(docs);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch financial documents" });
     }
   });
@@ -30,7 +31,7 @@ export function registerFinopsRoutes(app: Express): void {
       const doc = await storage.getFinancialDocument(req.params.id, req.user!.id);
       if (!doc) return res.status(404).json({ error: "Document not found" });
       res.json(doc);
-    } catch (e) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch document" });
     }
   });
@@ -39,10 +40,12 @@ export function registerFinopsRoutes(app: Express): void {
     try {
       const parsed = financialDocumentUpdateSchema.safeParse(req.body);
       if (!parsed.success) return apiError(res, 400, "VALIDATION_ERROR", "Invalid document update");
-      const updated = await storage.updateFinancialDocument(req.params.id, req.user!.id, parsed.data as any);
+      const { confirmedAt, ...rest } = parsed.data;
+      const updates: Partial<FinancialDocument> = { ...rest, ...(confirmedAt && { confirmedAt: new Date(confirmedAt) }) };
+      const updated = await storage.updateFinancialDocument(req.params.id, req.user!.id, updates);
       if (!updated) return apiError(res, 404, "NOT_FOUND", "Document not found");
       res.json(updated);
-    } catch (e) {
+    } catch {
       apiError(res, 500, "INTERNAL_ERROR", "Failed to update document");
     }
   });

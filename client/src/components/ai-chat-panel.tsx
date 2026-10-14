@@ -12,7 +12,6 @@ import {
   Shield,
   DollarSign,
   Calendar,
-  Loader2,
   MessageSquare,
   Trash2,
   Maximize2,
@@ -43,7 +42,7 @@ function escapeHtml(str: string): string {
 
 function formatMessage(content: string): string {
   const escaped = escapeHtml(content);
-  let html = escaped
+  const html = escaped
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/`([^`]+)`/g, "<code class='bg-muted px-1 py-0.5 rounded text-xs font-mono'>$1</code>")
@@ -75,7 +74,7 @@ export function AiChatPanel({ isOpen, onToggle, onExpandChange, emailId }: AiCha
 
   useEffect(() => {
     if (historyData) {
-      setMessages(historyData.map((msg: any) => ({ role: msg.role, content: msg.content })));
+      setMessages(historyData.map((msg: ChatMessage) => ({ role: msg.role, content: msg.content })));
     } else {
       setMessages([]);
     }
