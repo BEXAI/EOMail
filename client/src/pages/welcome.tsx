@@ -1,25 +1,6 @@
 import { Link } from "wouter";
-import { Sparkles, ShieldCheck, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import logoPath from "@assets/912AF931-1EA4-4CC4-8976-8C6D0557A5A5_1_105_c_1772859976130.jpeg";
-
-const FEATURES = [
-  {
-    icon: Sparkles,
-    title: "Smart summaries",
-    description: "Every email condensed to the lines that matter, with replies drafted for you.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Built-in protection",
-    description: "Phishing and impersonation attempts are flagged before you open them.",
-  },
-  {
-    icon: CalendarClock,
-    title: "Scheduling handled",
-    description: "Meeting requests turn into calendar suggestions automatically.",
-  },
-];
 
 /** Phone-first welcome screen shown at "/" to signed-out visitors on small screens. */
 export default function WelcomePage() {
@@ -33,7 +14,7 @@ export default function WelcomePage() {
         <span className="text-lg font-bold tracking-tight">EOMail</span>
       </header>
 
-      <main className="flex-1 flex flex-col justify-center px-6 py-10 [@media(max-height:700px)]:py-2">
+      <main className="flex-1 flex flex-col px-6 pt-8 pb-4 [@media(max-height:700px)]:pt-4">
         <h1 className="text-[2.1rem] [@media(max-height:700px)]:text-[1.85rem] leading-[1.1] font-bold tracking-tight">
           Email that
           <br />
@@ -43,19 +24,21 @@ export default function WelcomePage() {
           EOMail is an AI-powered inbox that sorts, summarizes, and answers your mail, so you spend less time in it.
         </p>
 
-        <ul className="mt-9 space-y-5 [@media(max-height:700px)]:mt-5 [@media(max-height:700px)]:space-y-3.5" data-testid="welcome-features">
-          {FEATURES.map(({ icon: Icon, title, description }) => (
-            <li key={title} className="flex gap-3.5">
-              <div className="shrink-0 w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                <Icon className="w-5 h-5" aria-hidden="true" />
-              </div>
-              <div>
-                <p className="text-[0.95rem] font-semibold">{title}</p>
-                <p className="text-sm text-muted-foreground leading-snug mt-0.5">{description}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        {/* Product preview: the app's menu in dark mode, cropped to whatever height the screen allows */}
+        <figure
+          className="relative mt-6 flex-1 min-h-[180px] overflow-hidden rounded-[1.75rem] bg-[#1b2027] ring-1 ring-border shadow-lg"
+          data-testid="welcome-preview"
+        >
+          <img
+            src="/assets/mobile-menu-dark.jpg"
+            alt="The EOMail menu in dark mode, with Compose, Inbox, Sent, Drafts, Pending Approvals, and the FinOps, Calendar, and Security AI features"
+            width={720}
+            height={1742}
+            decoding="async"
+            className="absolute inset-0 w-full h-full object-cover object-top"
+          />
+          <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#1b2027] to-transparent" aria-hidden="true" />
+        </figure>
       </main>
 
       {/* Pinned so both actions stay visible even if the content above scrolls */}
