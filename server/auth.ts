@@ -10,6 +10,8 @@ import { storage } from "./storage";
 import { pool } from "./db";
 import { type User } from "@shared/schema";
 import { sendPasswordResetEmail } from "./email";
+import { seedWelcomeEmails } from "./welcome-emails";
+import { normalizeUsername, validateUsername } from "@shared/username";
 
 declare global {
   namespace Express {
@@ -184,15 +186,27 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
-      const trimmedUsername = username.trim().toLowerCase();
-      const trimmedDisplayName = displayName.trim();
+      const trimmedUsername = normalizeUsername(String(username));
+      const trimmedDisplayName = String(displayName).trim();
 
       if (!trimmedUsername || !trimmedDisplayName) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
-      if (password.length < 12) {
+      const usernameError = validateUsername(trimmedUsername);
+      if (usernameError) {
+        return res.status(400).json({ message: usernameError });
+      }
+
+      if (trimmedDisplayName.length > 60) {
+        return res.status(400).json({ message: "Display name must be at most 60 characters" });
+      }
+
+      if (typeof password !== "string" || password.length < 12) {
         return res.status(400).json({ message: "Password must be at least 12 characters" });
+      }
+      if (password.length > 128) {
+        return res.status(400).json({ message: "Password must be at most 128 characters" });
       }
 
       const existingUsername = await storage.getUserByUsername(trimmedUsername);
@@ -222,6 +236,13 @@ export function setupAuth(app: Express) {
         emailVerified: true,
       });
 
+      // A failed seed must never block account creation
+      try {
+        await seedWelcomeEmails(user);
+      } catch (seedErr) {
+        console.error("Failed to seed welcome emails:", seedErr);
+      }
+
       const { password: _, verificationToken: _vt, resetToken: _rt, resetTokenExpiry: _rte, ...safeUser } = user;
       req.session.regenerate((regenerateErr) => {
         if (regenerateErr) return next(regenerateErr);
@@ -239,6 +260,18 @@ export function setupAuth(app: Express) {
         }
         return res.status(400).json({ message: "An account with this username already exists" });
       }
+      next(err);
+    }
+  });
+
+  app.get("/api/auth/username-available", async (req, res, next) => {
+    try {
+      const username = normalizeUsername(String(req.query.username ?? ""));
+      const error = validateUsername(username);
+      if (error) return res.json({ available: false, message: error });
+      const existing = await storage.getUserByUsername(username);
+      res.json(existing ? { available: false, message: "That username is taken" } : { available: true });
+    } catch (err) {
       next(err);
     }
   });

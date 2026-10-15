@@ -73,6 +73,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onSuccess: (data: AuthUser) => {
       queryClient.setQueryData(["/api/auth/user"], data);
       queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
+      toast({
+        title: `Welcome to EOMail, ${data.displayName.split(" ")[0]}!`,
+        description: `Your address ${data.mailboxAddress || data.email} is ready to receive mail.`,
+      });
     },
     onError: (error: Error) => {
       toast({
