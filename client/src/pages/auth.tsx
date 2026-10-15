@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Eye, EyeOff, Check, X } from "lucide-react";
+import { Loader2, Eye, EyeOff, Check, X, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizeUsername, validateUsername } from "@shared/username";
 import logoPath from "@assets/912AF931-1EA4-4CC4-8976-8C6D0557A5A5_1_105_c_1772859976130.jpeg";
@@ -26,9 +26,19 @@ export default function AuthPage() {
     return null;
   }
 
+  // The welcome screen links here with ?mode=signup to open the Create Account tab
+  const initialTab = new URLSearchParams(window.location.search).get("mode") === "signup" ? "register" : "login";
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div
+      className="min-h-[100dvh] flex items-center justify-center bg-background px-4 py-8"
+      style={{ paddingTop: "max(env(safe-area-inset-top), 2rem)", paddingBottom: "max(env(safe-area-inset-bottom), 2rem)" }}
+    >
       <div className="w-full max-w-md">
+        <Link href="/" className="md:hidden -ml-1 mb-4 inline-flex items-center gap-1 h-10 text-sm text-muted-foreground hover:text-foreground" data-testid="link-auth-back">
+          <ChevronLeft className="w-4 h-4" />
+          Back
+        </Link>
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
             <img src={logoPath} alt="EOMail logo" className="w-12 h-12 rounded-xl object-cover" />
@@ -42,7 +52,7 @@ export default function AuthPage() {
           </p>
         </div>
 
-        <Tabs defaultValue="login" className="w-full">
+        <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2" data-testid="auth-tabs">
             <TabsTrigger value="login" data-testid="tab-login">Sign In</TabsTrigger>
             <TabsTrigger value="register" data-testid="tab-register">Create Account</TabsTrigger>
@@ -322,7 +332,7 @@ function RegisterForm({ registerMutation }: { registerMutation: UseMutationResul
                 required
                 aria-invalid={!!usernameError || availability.state === "unavailable" || undefined}
                 aria-describedby="register-username-hint"
-                className="flex-1 min-w-0 h-10 px-3 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                className="flex-1 min-w-0 h-10 px-3 bg-transparent text-base md:text-sm outline-none placeholder:text-muted-foreground"
                 data-testid="input-register-username"
               />
               <span className="pr-3 text-sm text-muted-foreground select-none">@eomail.co</span>

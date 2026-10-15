@@ -8,8 +8,10 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Loader2 } from "lucide-react";
 import { Redirect } from "wouter";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const MailPage = lazy(() => import("@/pages/mail"));
+const WelcomePage = lazy(() => import("@/pages/welcome"));
 const AuthPage = lazy(() => import("@/pages/auth"));
 const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
@@ -48,6 +50,16 @@ function LazyFallback() {
   );
 }
 
+// Signed-out visitors on phones get a focused welcome screen; desktop keeps the demo inbox
+function HomeRoute() {
+  const { user, isLoading } = useAuth();
+  const isMobile = useIsMobile();
+  if (isMobile && !user) {
+    return isLoading ? <LazyFallback /> : <WelcomePage />;
+  }
+  return <MailPage />;
+}
+
 function Router() {
   return (
     <Suspense fallback={<LazyFallback />}>
@@ -60,7 +72,7 @@ function Router() {
           {() => <ProtectedRoute component={SettingsPage} />}
         </Route>
         <Route path="/">
-          {() => <MailPage />}
+          {() => <HomeRoute />}
         </Route>
         <Route component={NotFound} />
       </Switch>
