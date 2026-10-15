@@ -3,7 +3,7 @@ import DOMPurify from "dompurify";
 import { type Email } from "@shared/schema";
 import { getInitials, getSenderColor, cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -137,6 +137,9 @@ export function EmailDetail({ email, isLoading, onBack, onStar, onDelete, onRepl
       queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
       queryClient.invalidateQueries({ queryKey: ["/api/emails/counts"] });
       toast({ title: "Reply sent", description: "AI draft reply has been approved and sent." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Reply not sent", description: apiErrorMessage(err), variant: "destructive" });
     },
   });
 

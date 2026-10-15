@@ -6,6 +6,18 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/**
+ * Turns a provider error into a message safe to show users. Configuration problems
+ * (bad API key, unverified domain) are the operator's to fix, so users get a generic note.
+ */
+export function userFacingSendError(raw?: string): string {
+  const msg = (raw || "").toLowerCase();
+  if (msg.includes("api key") || msg.includes("not configured") || msg.includes("domain") || msg.includes("not verified")) {
+    return "Outgoing mail is temporarily unavailable, so your message was not sent.";
+  }
+  return raw ? `Your message could not be delivered: ${raw}` : "Your message could not be delivered.";
+}
+
 export async function sendEmail(opts: {
   from: string;
   fromEmail: string;
@@ -19,9 +31,11 @@ export async function sendEmail(opts: {
     return { success: false, error: "RESEND_API_KEY not configured" };
   }
   try {
+    // Quote the display name so commas and other specials keep the header valid
+    const displayName = `"${opts.from.replace(/["\\\r\n]/g, "")}"`;
     const fromAddress = opts.fromEmail.endsWith(`@${DOMAIN}`)
-      ? `${opts.from} <${opts.fromEmail}>`
-      : `${opts.from} <noreply@${DOMAIN}>`;
+      ? `${displayName} <${opts.fromEmail}>`
+      : `${displayName} <noreply@${DOMAIN}>`;
 
     const payload: Parameters<typeof resend.emails.send>[0] = {
       from: fromAddress,

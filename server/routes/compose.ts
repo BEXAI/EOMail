@@ -3,7 +3,7 @@ import { z } from "zod";
 import { storage } from "../storage";
 import { requireAuth } from "../auth";
 import { draftReply, expandDraft } from "../ai";
-import { sendEmail } from "../email";
+import { sendEmail, userFacingSendError } from "../email";
 import { emailContextIndex } from "../ai-context";
 import { invalidateCache } from "../cache";
 import { escapeHtml } from "./_shared";
@@ -46,6 +46,8 @@ export function registerComposeRoutes(app: Express): void {
       });
       if (!mailResult.success) {
         console.error("Reply delivery failed:", mailResult.error);
+        // Keep the AI draft so the user can retry once sending works
+        return res.status(502).json({ error: userFacingSendError(mailResult.error), code: "SEND_FAILED" });
       }
 
       await storage.createEmail({

@@ -1,9 +1,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { type ComposeData } from "@/components/compose-dialog";
 import { type Email } from "@shared/schema";
 import { type AuthUser } from "@/hooks/use-auth";
+
+class SendError extends Error {
+    constructor(message: string, readonly savedToDrafts: boolean) {
+        super(message);
+    }
+}
 
 export function useEmailMutations({
     user,
@@ -24,26 +30,67 @@ export function useEmailMutations({
         queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
     };
 
-    const sendMutation = useMutation({
-        mutationFn: async (data: ComposeData & { draftId?: string }) => {
-            const now = new Date();
+    // Saves (or updates) a draft; shared by manual saves and failed sends
+    const persistDraft = async (data: ComposeData & { draftId?: string }) => {
+        const fields = {
+            to: data.to.split("@")[0] || data.to || "Draft",
+            toEmail: data.to || "",
+            cc: data.cc || "",
+            bcc: data.bcc || "",
+            subject: data.subject || "(no subject)",
+            body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
+            preview: data.body.slice(0, 120) || "(empty draft)",
+            folder: "drafts",
+        };
+        if (data.draftId) {
+            await apiRequest("PATCH", `/api/emails/${data.draftId}`, fields);
+        } else {
             await apiRequest("POST", "/api/emails", {
+                ...fields,
                 from: user?.displayName || user?.username || "You",
                 fromEmail: user?.mailboxAddress || user?.email || "",
-                to: data.to.split("@")[0] || data.to,
-                toEmail: data.to,
-                cc: data.cc || "",
-                bcc: data.bcc || "",
-                subject: data.subject || "(no subject)",
-                body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
-                preview: data.body.slice(0, 120),
-                timestamp: now.toISOString(),
+                timestamp: new Date().toISOString(),
                 read: true,
                 starred: false,
-                folder: "sent",
                 labels: [],
                 attachments: 0,
             });
+        }
+    };
+
+    const sendMutation = useMutation({
+        mutationFn: async (data: ComposeData & { draftId?: string }) => {
+            const now = new Date();
+            try {
+                await apiRequest("POST", "/api/emails", {
+                    from: user?.displayName || user?.username || "You",
+                    fromEmail: user?.mailboxAddress || user?.email || "",
+                    to: data.to.split("@")[0] || data.to,
+                    toEmail: data.to,
+                    cc: data.cc || "",
+                    bcc: data.bcc || "",
+                    subject: data.subject || "(no subject)",
+                    body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
+                    preview: data.body.slice(0, 120),
+                    timestamp: now.toISOString(),
+                    read: true,
+                    starred: false,
+                    folder: "sent",
+                    labels: [],
+                    attachments: 0,
+                });
+            } catch (err) {
+                // The compose window has already closed, so keep the message as a draft
+                const reason = apiErrorMessage(err);
+                let savedToDrafts = false;
+                try {
+                    await persistDraft(data);
+                    savedToDrafts = true;
+                } catch {
+                    // fall through with savedToDrafts = false
+                }
+                throw new SendError(reason, savedToDrafts);
+            }
             if (data.draftId) {
                 await apiRequest("DELETE", `/api/emails/${data.draftId}`);
             }
@@ -52,45 +99,19 @@ export function useEmailMutations({
             invalidateAll();
             toast({ title: "Email sent", description: "Your message has been sent successfully." });
         },
-        onError: () => {
-            toast({ title: "Failed to send", description: "Something went wrong. Please try again.", variant: "destructive" });
+        onError: (err: Error) => {
+            invalidateAll();
+            const saved = err instanceof SendError && err.savedToDrafts;
+            toast({
+                title: saved ? "Not sent: saved to Drafts" : "Failed to send",
+                description: err.message || "Something went wrong. Please try again.",
+                variant: "destructive",
+            });
         },
     });
 
     const saveDraftMutation = useMutation({
-        mutationFn: async (data: ComposeData & { draftId?: string }) => {
-            const now = new Date();
-            if (data.draftId) {
-                await apiRequest("PATCH", `/api/emails/${data.draftId}`, {
-                    to: data.to.split("@")[0] || data.to || "Draft",
-                    toEmail: data.to || "",
-                    cc: data.cc || "",
-                    bcc: data.bcc || "",
-                    subject: data.subject || "(no subject)",
-                    body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
-                    preview: data.body.slice(0, 120) || "(empty draft)",
-                    folder: "drafts",
-                });
-            } else {
-                await apiRequest("POST", "/api/emails", {
-                    from: user?.displayName || user?.username || "You",
-                    fromEmail: user?.mailboxAddress || user?.email || "",
-                    to: data.to.split("@")[0] || data.to || "Draft",
-                    toEmail: data.to || "",
-                    cc: data.cc || "",
-                    bcc: data.bcc || "",
-                    subject: data.subject || "(no subject)",
-                    body: `<p>${data.body.replace(/\n/g, "</p><p>")}</p>`,
-                    preview: data.body.slice(0, 120) || "(empty draft)",
-                    timestamp: now.toISOString(),
-                    read: true,
-                    starred: false,
-                    folder: "drafts",
-                    labels: [],
-                    attachments: 0,
-                });
-            }
-        },
+        mutationFn: persistDraft,
         onSuccess: () => {
             invalidateAll();
             toast({ title: "Draft saved" });

@@ -7,6 +7,20 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+// apiRequest throws "<status>: <body>"; pull out the server's message when there is one
+export function apiErrorMessage(err: unknown, fallback = "Something went wrong. Please try again."): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const body = raw.replace(/^\d{3}:\s*/, "");
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown; message?: unknown };
+    const msg = parsed.error ?? parsed.message;
+    if (typeof msg === "string") return msg;
+  } catch {
+    // not JSON
+  }
+  return fallback;
+}
+
 export async function apiRequest(
   method: string,
   url: string,

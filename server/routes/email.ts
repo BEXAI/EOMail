@@ -4,7 +4,7 @@ import { storage } from "../storage";
 import { insertEmailSchema, emails } from "@shared/schema";
 import { requireAuth } from "../auth";
 import { processEmail } from "../ai-pipeline";
-import { sendEmail } from "../email";
+import { sendEmail, userFacingSendError } from "../email";
 import { resend } from "../resend-client";
 import { emailContextIndex } from "../ai-context";
 import { invalidateCache } from "../cache";
@@ -114,6 +114,8 @@ export function registerEmailRoutes(app: Express): void {
         });
         if (!result.success) {
           console.error("Email delivery failed:", result.error);
+          // Never file an undelivered message under Sent
+          return res.status(502).json({ error: userFacingSendError(result.error), code: "SEND_FAILED" });
         }
       }
 
