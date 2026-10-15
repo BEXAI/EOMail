@@ -10,7 +10,8 @@
     "check": "tsc",
     "db:fix": "npx tsx script/fix-schema-types.ts",
     "db:push": "npm run db:fix && npx drizzle-kit push --force",
-    "lint": "eslint client/src server shared"
+    "lint": "eslint client/src server shared",
+    "postbuild": "if [ -n \"$RENDER\" ]; then npm run db:push; else echo \"Skipping db:push (not running on Render)\"; fi"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

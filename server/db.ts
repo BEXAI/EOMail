@@ -20,6 +20,19 @@ pool.on("error", (err) => {
 
 export const db = drizzle(pool, { schema });
 
+// connect-pg-simple's createTableIfMissing reads a table.sql file next to its own source,
+// which does not exist once the server is bundled into dist/, so create the table here.
+export async function ensureSessionTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "session" (
+      "sid" varchar NOT NULL COLLATE "default" PRIMARY KEY,
+      "sess" json NOT NULL,
+      "expire" timestamp(6) NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+  `);
+}
+
 export async function verifyDatabaseConnection(retries = 3): Promise<boolean> {
   for (let i = 0; i < retries; i++) {
     try {

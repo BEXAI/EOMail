@@ -97,12 +97,15 @@ app.use((req, res, next) => {
 
 (async () => {
   // Verify database connection before starting
-  const { verifyDatabaseConnection } = await import("./db");
+  const { verifyDatabaseConnection, ensureSessionTable } = await import("./db");
   const dbReady = await verifyDatabaseConnection(5);
   if (!dbReady) {
     console.error("FATAL: Database is unreachable after 5 retries. Exiting.");
     process.exit(1);
   }
+  await ensureSessionTable();
+  const { checkSchema } = await import("./schema-check");
+  await checkSchema().catch((err) => console.error("[schema] check failed:", err));
 
   // Warn about missing optional env vars (non-fatal)
   const envWarnings: string[] = [];
