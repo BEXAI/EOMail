@@ -106,6 +106,8 @@ app.use((req, res, next) => {
   await ensureSessionTable();
   const { checkSchema } = await import("./schema-check");
   await checkSchema().catch((err) => console.error("[schema] check failed:", err));
+  const { checkResendKey } = await import("./resend-client");
+  void checkResendKey();
 
   // Warn about missing optional env vars (non-fatal)
   const envWarnings: string[] = [];
