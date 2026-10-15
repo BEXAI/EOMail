@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { MenuPreview } from "@/components/menu-preview";
 import logoPath from "@assets/912AF931-1EA4-4CC4-8976-8C6D0557A5A5_1_105_c_1772859976130.jpeg";
 
 /** Phone-first welcome screen shown at "/" to signed-out visitors on small screens. */
@@ -24,21 +25,8 @@ export default function WelcomePage() {
           EOMail is an AI-powered inbox that sorts, summarizes, and answers your mail, so you spend less time in it.
         </p>
 
-        {/* Product preview: the app's menu in dark mode, cropped to whatever height the screen allows */}
-        <figure
-          className="relative mt-6 flex-1 min-h-[180px] overflow-hidden rounded-[1.75rem] bg-[#1b2027] ring-1 ring-border shadow-lg"
-          data-testid="welcome-preview"
-        >
-          <img
-            src="/assets/mobile-menu-dark.jpg"
-            alt="The EOMail menu in dark mode, with Compose, Inbox, Sent, Drafts, Pending Approvals, and the FinOps, Calendar, and Security AI features"
-            width={720}
-            height={1742}
-            decoding="async"
-            className="absolute inset-0 w-full h-full object-cover object-top"
-          />
-          <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#1b2027] to-transparent" aria-hidden="true" />
-        </figure>
+        {/* The full app menu in dark mode, compressed to fit whatever height the screen allows */}
+        <MenuPreview className="mt-6 flex-1 min-h-[180px]" />
       </main>
 
       {/* Pinned so both actions stay visible even if the content above scrolls */}
@@ -52,7 +40,7 @@ export default function WelcomePage() {
         <Button asChild variant="outline" className="w-full h-12 text-base font-semibold rounded-xl" data-testid="button-welcome-signin">
           <Link href="/auth">Sign in</Link>
         </Button>
-        <p className="pt-1 text-center text-xs text-muted-foreground">
+        <p className="pt-1 text-center text-xs text-muted-foreground [@media(max-height:700px)]:hidden">
           Get your own <span className="font-medium text-foreground">@eomail.co</span> address in under a minute.
         </p>
       </footer>
